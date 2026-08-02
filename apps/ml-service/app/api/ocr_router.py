@@ -84,20 +84,24 @@ async def parse_receipt(file: UploadFile = File(...)):
     prompt = f"""You are an elite invoice and receipt parser. Analyze the raw OCR text and structure it into a clean JSON output.
 
 CRITICAL PARSING RULES:
-1. DATE SELECTION:
-   - Prefer the transaction/flight/service date over the invoice creation date.
-   - Example: If "Flight Date" is "31-01-2026" and "Invoice Date" is "23-01-2026", use "31-01-2026" as the primary date.
-   - Always convert dates from DD-MM-YYYY or any format to ISO YYYY-MM-DD.
+1. MERCHANT NAME EXTRACTION:
+   - Extract the primary business or entity name from the header (e.g. "JAINEMO PRIVATE LIMITED" or "Apna College").
+   - Clean up small OCR noise or misread prefix artifacts (e.g. if raw OCR produces "AM JAINEMO PRIVATE LIMITED" due to logo artifact text like "APNA", extract clean "JAINEMO PRIVATE LIMITED").
 
-2. TAX EXTRACTION:
-   - If there are generic taxes, levies, or fees (like "Airport Taxes-Pass Through", CGST, SGST, IGST, or "Service Tax"), sum them up and put it under the "tax" field. Do not leave tax as 0 if taxes/pass-through fees are explicitly listed.
+2. DATE SELECTION:
+   - Prefer the transaction/flight/service date over invoice creation date.
+   - Always convert dates to ISO format YYYY-MM-DD.
 
-3. AMOUNT FIELDS:
-   - For total_amount, always extract the Grand Total or Final Invoice Value (e.g. 9,344.00).
+3. TAX EXTRACTION:
+   - Only extract tax if an EXPLICIT, separately itemized numerical tax amount is printed on the receipt (e.g., "Tax: ₹1,439.82", "CGST: ₹719.91", "IGST: ₹1,439.82").
+   - If the receipt states that tax/GST is "included" (e.g., "18% GST included") WITHOUT showing a separate numerical tax amount line, do NOT calculate or invent a separate tax figure — set "tax": 0.00.
+
+4. AMOUNT FIELDS:
+   - For total_amount, always extract the Grand Total or Final Invoice Value.
 
 Return ONLY this JSON schema (do NOT include markdown fences, no explanations, just pure JSON):
 {{
-  "merchant": "exact business name from the invoice header",
+  "merchant": "exact clean business name from invoice header",
   "date": "YYYY-MM-DD",
   "total_amount": 0.00,
   "tax": 0.00,
