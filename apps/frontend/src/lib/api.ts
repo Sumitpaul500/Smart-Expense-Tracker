@@ -204,6 +204,11 @@ export interface CreateTransactionPayload {
 	categoryId?: string;
 	tags?: string[];
 	isRecurring?: boolean;
+	baseAmount?: number;
+	taxAmount?: number;
+	taxBreakdown?: Record<string, number>;
+	additionalCharges?: Array<{ description: string; amount: number }>;
+	totalAmount?: number;
 }
 
 export interface OcrLineItem {
@@ -213,10 +218,15 @@ export interface OcrLineItem {
 
 export interface OcrResult {
 	merchant: string | null;
+	invoice_number?: string | null;
 	date: string | null;
-	total_amount: number;
-	tax: number;
 	currency: string;
+	base_amount: number;
+	tax_amount: number;
+	tax_breakdown: Record<string, number>;
+	additional_charges: Array<{ description: string; amount: number }>;
+	total_amount: number;
 	line_items: OcrLineItem[];
+	payment_method?: string | null;
 	raw_text: string | null;
 }

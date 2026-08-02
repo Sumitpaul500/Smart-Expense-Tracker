@@ -80,6 +80,11 @@
 				merchant: result.merchant ?? 'Unknown Merchant',
 				date: result.date ?? new Date().toISOString(),
 				currency: result.currency ?? 'INR',
+				baseAmount: result.base_amount,
+				taxAmount: result.tax_amount,
+				taxBreakdown: result.tax_breakdown,
+				additionalCharges: result.additional_charges,
+				totalAmount: result.total_amount,
 			});
 			txSaved = true;
 		} catch (e: any) {
@@ -89,8 +94,12 @@
 		}
 	}
 
-	function fmt(n: number) {
-		return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(n);
+	function fmt(n: number, currency = 'INR') {
+		try {
+			return new Intl.NumberFormat('en-IN', { style: 'currency', currency: currency || 'INR' }).format(n);
+		} catch (e) {
+			return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(n);
+		}
 	}
 </script>
 
@@ -251,7 +260,7 @@
 					<!-- Summary fields -->
 					<div class="p-5 space-y-4">
 						<div class="grid grid-cols-2 gap-3">
-							<div class="p-3 rounded-xl bg-secondary/40 border border-border/40">
+							<div class="p-3 rounded-xl bg-secondary/40 border border-border/40 col-span-2">
 								<p class="text-[11px] text-muted-foreground uppercase font-semibold tracking-wider mb-1">Merchant</p>
 								<p class="font-semibold text-sm">{result.merchant ?? '—'}</p>
 							</div>
@@ -262,14 +271,28 @@
 								<p class="font-semibold text-sm">{result.date ?? '—'}</p>
 							</div>
 							<div class="p-3 rounded-xl bg-secondary/40 border border-border/40">
-								<p class="text-[11px] text-muted-foreground uppercase font-semibold tracking-wider mb-1 flex items-center gap-1">
-									<Coins class="w-3 h-3" /> Total
-								</p>
-								<p class="font-bold text-lg text-emerald-400">{fmt(result.total_amount)}</p>
+								<p class="text-[11px] text-muted-foreground uppercase font-semibold tracking-wider mb-1">Currency</p>
+								<p class="font-semibold text-sm">{result.currency ?? 'INR'}</p>
+							</div>
+							<div class="p-3 rounded-xl bg-secondary/40 border border-border/40">
+								<p class="text-[11px] text-muted-foreground uppercase font-semibold tracking-wider mb-1">Base Amount</p>
+								<p class="font-semibold text-sm">{fmt(result.base_amount ?? (result.total_amount - (result.tax_amount ?? 0)), result.currency)}</p>
 							</div>
 							<div class="p-3 rounded-xl bg-secondary/40 border border-border/40">
 								<p class="text-[11px] text-muted-foreground uppercase font-semibold tracking-wider mb-1">Tax</p>
-								<p class="font-semibold text-sm">{fmt(result.tax)}</p>
+								<p class="font-semibold text-sm">{fmt(result.tax_amount ?? 0.00, result.currency)}</p>
+							</div>
+							<div class="p-3 rounded-xl bg-secondary/40 border border-border/40">
+								<p class="text-[11px] text-muted-foreground uppercase font-semibold tracking-wider mb-1">Additional Charges</p>
+								<p class="font-semibold text-sm">
+									{fmt(result.additional_charges?.reduce((sum, c) => sum + (c.amount || 0), 0) ?? 0, result.currency)}
+								</p>
+							</div>
+							<div class="p-3 rounded-xl bg-secondary/40 border border-border/40">
+								<p class="text-[11px] text-muted-foreground uppercase font-semibold tracking-wider mb-1 flex items-center gap-1">
+									<Coins class="w-3 h-3" /> Total Amount
+								</p>
+								<p class="font-bold text-lg text-emerald-400">{fmt(result.total_amount, result.currency)}</p>
 							</div>
 						</div>
 
@@ -283,7 +306,7 @@
 									{#each result.line_items as item}
 										<div class="flex items-center justify-between px-3 py-2 rounded-lg bg-secondary/30 text-sm">
 											<span class="text-muted-foreground truncate mr-3">{item.description}</span>
-											<span class="font-medium shrink-0">{fmt(item.amount)}</span>
+											<span class="font-medium shrink-0">{fmt(item.amount, result.currency)}</span>
 										</div>
 									{/each}
 								</div>

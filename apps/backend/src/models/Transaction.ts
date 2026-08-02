@@ -21,6 +21,11 @@ export interface ITransaction extends Document {
         autoCategorized: boolean;
     };
     status: 'cleared' | 'pending';
+    baseAmount?: number;
+    taxAmount?: number;
+    taxBreakdown?: Record<string, number>;
+    additionalCharges?: Array<{ description: string; amount: number }>;
+    totalAmount?: number;
 }
 
 const transactionSchema = new Schema<ITransaction>(
@@ -45,6 +50,16 @@ const transactionSchema = new Schema<ITransaction>(
             autoCategorized: { type: Boolean, default: false },
         },
         status: { type: String, enum: ['cleared', 'pending'], default: 'cleared' },
+        baseAmount: { type: Number },
+        taxAmount: { type: Number },
+        taxBreakdown: { type: Schema.Types.Mixed },
+        additionalCharges: [
+            {
+                description: { type: String },
+                amount: { type: Number }
+            }
+        ],
+        totalAmount: { type: Number },
     },
     { timestamps: true }
 );

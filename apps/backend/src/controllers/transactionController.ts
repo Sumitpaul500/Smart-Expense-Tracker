@@ -46,10 +46,7 @@ export const getTransactions = async (req: AuthRequest, res: Response) => {
 // ─── POST /api/v1/transactions ────────────────────────────────────────────────
 export const createTransaction = async (req: AuthRequest, res: Response) => {
     try {
-        const { type, amount, currency, date, categoryId, merchant, location, tags, isRecurring } = req.body;
-
-        const transaction = await Transaction.create({
-            userId: req.user?._id,
+        const {
             type,
             amount,
             currency,
@@ -59,6 +56,29 @@ export const createTransaction = async (req: AuthRequest, res: Response) => {
             location,
             tags,
             isRecurring,
+            baseAmount,
+            taxAmount,
+            taxBreakdown,
+            additionalCharges,
+            totalAmount
+        } = req.body;
+
+        const transaction = await Transaction.create({
+            userId: req.user?._id,
+            type,
+            amount: amount || totalAmount,
+            currency,
+            date,
+            categoryId,
+            merchant,
+            location,
+            tags,
+            isRecurring,
+            baseAmount,
+            taxAmount,
+            taxBreakdown,
+            additionalCharges,
+            totalAmount: totalAmount || amount
         });
 
         res.status(201).json(transaction);

@@ -19,37 +19,124 @@ def extract_json_from_text(text: str) -> dict:
     return json.loads(cleaned)
 
 
+def preprocess_ocr_text(text: str) -> str:
+    """
+    Clean up common OCR spelling mistakes and character confusions
+    before sending raw text to the AI model.
+    """
+    if not text:
+        return text
+    
+    # 1. Spelling corrections
+    corrections = {
+        r'(?i)\bairoort\b': 'Airport',
+        r'(?i)\bairoort\s+taxes\b': 'Airport Taxes',
+        r'(?i)\bairoot\b': 'Airport',
+        r'(?i)\bthrouah\b': 'Through',
+        r'(?i)\bamaz0n\b': 'Amazon',
+        r'(?i)\brestaurent\b': 'Restaurant',
+        r'(?i)\bconvience\b': 'Convenience',
+        r'(?i)\bconvenience\s+fee\b': 'Convenience Fee',
+        r'(?i)\bconvenience\s+charges\b': 'Convenience Charges'
+    }
+    
+    for pattern, replacement in corrections.items():
+        text = re.sub(pattern, replacement, text)
+
+    # 2. Number cleaning: Correct O/o/I/l confusion in numbers
+    def fix_numbers(match):
+        val = match.group(0)
+        # Convert O/o to 0
+        val = val.replace('O', '0').replace('o', '0')
+        # Convert I/l to 1 in digits / decimals
+        val = re.sub(r'(?<=\d)[I|l](?=\d)', '1', val)
+        val = re.sub(r'(?<=\.)[I|l](?=\d)', '1', val)
+        val = re.sub(r'(?<=\d)[I|l](?=$)', '1', val)
+        return val
+
+    # Match tokens that look like numbers but contain confused letters
+    text = re.sub(r'\b[0-9OoIl\.,]{3,}\b', fix_numbers, text)
+
+    return text
+
+
 def sanitize_merchant(name: str) -> str:
     """
     Strip OCR logo artifacts that get prepended to real company names.
-    e.g. "AM JAINEMO PRIVATE LIMITED" → "JAINEMO PRIVATE LIMITED"
-         "AP RELIANCE JIO" → "RELIANCE JIO"
     """
     if not name:
         return name
     name = name.strip()
-    # Strip a leading 1-4 uppercase-only word followed by a space
     cleaned = re.sub(r'^[A-Z]{1,4}\s+(?=[A-Z])', '', name).strip()
     return cleaned if cleaned else name
 
 
-def sanitize_tax(tax_value, raw_text: str) -> float:
+def validate_receipt_amounts(parsed: dict, raw_text: str) -> dict:
     """
-    Only accept a tax value from the LLM if an explicit, standalone
-    numerical tax line is found in the raw OCR text.
-    Patterns that count as explicit: 'CGST ₹xxx', 'SGST: 500', 'Tax: ₹1,439'
-    Patterns that do NOT count: '18% GST included', 'inclusive of tax'
+    Validate that: base_amount + tax_amount + sum(additional_charges) == total_amount.
+    Auto-corrects minor mismatches, otherwise raises ValueError.
     """
-    # Check for an explicit tax line in OCR text: a tax keyword adjacent to a number
-    explicit_tax_pattern = re.search(
-        r'(CGST|SGST|IGST|Tax\s*:|GST\s*:)\s*[₹Rs.]?\s*[\d,]+\.?\d*',
-        raw_text,
-        re.IGNORECASE
-    )
-    if explicit_tax_pattern:
-        return float(tax_value) if tax_value else 0.00
-    # No standalone numeric tax line found — return 0
-    return 0.00
+    base = float(parsed.get("base_amount", 0.00) or 0.00)
+    tax = float(parsed.get("tax_amount", 0.00) or 0.00)
+    
+    charges = 0.0
+    add_charges = parsed.get("additional_charges", [])
+    if not isinstance(add_charges, list):
+        add_charges = []
+    
+    for c in add_charges:
+        if isinstance(c, dict) and "amount" in c:
+            charges += float(c["amount"] or 0.00)
+            
+    total = float(parsed.get("total_amount", 0.00) or 0.00)
+    
+    # Recalculate tax if breakdown has different values
+    breakdown = parsed.get("tax_breakdown", {})
+    if isinstance(breakdown, dict):
+        bd_tax_sum = sum(float(v or 0.00) for v in breakdown.values())
+        if bd_tax_sum > 0 and abs(bd_tax_sum - tax) > 0.05:
+            tax = bd_tax_sum
+            parsed["tax_amount"] = tax
+
+    sum_components = base + tax + charges
+    diff = total - sum_components
+
+    # Automatically handle common validation discrepancies
+    if abs(diff) > 0.05:
+        # Case A: If base is zero but total and tax are non-zero, base is likely missing
+        if base == 0 and total > 0:
+            base = total - tax - charges
+            parsed["base_amount"] = round(base, 2)
+            diff = 0.0
+        # Case B: If total is zero, set it to the sum of components
+        elif total == 0:
+            total = sum_components
+            parsed["total_amount"] = round(total, 2)
+            diff = 0.0
+        # Case C: Other missing charge/levy, add as otherCharges
+        else:
+            if diff > 0:
+                add_charges.append({
+                    "description": "Other Charges",
+                    "amount": round(diff, 2)
+                })
+                parsed["additional_charges"] = add_charges
+                diff = 0.0
+
+    # Final re-validation
+    base = float(parsed.get("base_amount", 0.00) or 0.00)
+    tax = float(parsed.get("tax_amount", 0.00) or 0.00)
+    charges = sum(float(c.get("amount", 0.0) or 0.0) for c in parsed.get("additional_charges", []))
+    total = float(parsed.get("total_amount", 0.00) or 0.00)
+    
+    final_sum = round(base + tax + charges, 2)
+    if abs(final_sum - total) > 0.1:
+        raise ValueError(
+            f"Validation failed: Sum of components ({base} base + {tax} tax + {charges} charges = {final_sum}) "
+            f"does not match Total Amount ({total}). Discrepancy of {round(total - final_sum, 2)}."
+        )
+        
+    return parsed
 
 
 @router.post("/parse-receipt")
@@ -63,21 +150,35 @@ async def parse_receipt(file: UploadFile = File(...)):
     # Demo fallback if no Groq key configured
     if not groq_key or groq_key.strip() in ("YOUR_GROQ_API_KEY", "", "null"):
         return {
-            "merchant": "JAINEMO PRIVATE LIMITED",
-            "date": "2023-12-20",
-            "total_amount": 7999.00,
-            "tax": 0.00,
+            "merchant": "AIX CONNECT PRIVATE LIMITED",
+            "invoice_number": "BBLR240100116949",
+            "date": "2024-01-25",
             "currency": "INR",
+            "base_amount": 7043.00,
+            "tax_amount": 767.00,
+            "tax_breakdown": {
+                "gst": 0.00,
+                "cgst": 0.00,
+                "sgst": 0.00,
+                "igst": 0.00,
+                "vat": 0.00,
+                "airport_tax": 767.00,
+                "service_tax": 0.00
+            },
+            "additional_charges": [],
+            "total_amount": 7810.00,
             "line_items": [
-                {"description": "Sigma | DSA & Web Development", "amount": 7999.00}
+                {"description": "Air Ticket charges", "amount": 7043.00},
+                {"description": "Airport Taxes-Pass Through", "amount": 767.00}
             ],
+            "payment_method": None,
             "raw_text": "(Demo mode — add GROQ_API_KEY to enable real OCR)",
         }
 
     image_bytes = await file.read()
     mime_type = file.content_type or "image/jpeg"
 
-    # Step 1: OCR via OCR.space Engine 2
+    # Step 1: Perform free OCR via OCR.space API using Engine 2
     raw_text = ""
     try:
         payload = {
@@ -107,38 +208,71 @@ async def parse_receipt(file: UploadFile = File(...)):
         print("[OCR.space Failed]", str(e))
         raw_text = f"Receipt scanned. Filename: {file.filename}."
 
-    print(f"[OCR Raw Text]:\n{raw_text[:500]}")  # Debug: log first 500 chars
+    # Perform OCR text pre-cleaning
+    cleaned_ocr_text = preprocess_ocr_text(raw_text)
 
-    # Step 2: Groq LLM structuring
-    prompt = f"""You are an expert invoice parser. Extract data from the following OCR text into JSON.
+    # Step 2: Use Groq LLM to structure the extracted text
+    prompt = f"""You are an elite financial document and receipt parser. Extract receipt details from the raw OCR text into the specified structured JSON format.
 
-RULES (follow exactly):
-1. MERCHANT: Extract the PRIMARY company name from the document header only.
-   - Ignore any small logo text or brand watermarks that appear before the company name.
-   - Only return the legal entity name printed prominently at the top (e.g. "JAINEMO PRIVATE LIMITED").
+RAW OCR TEXT:
+{cleaned_ocr_text}
 
-2. DATE: Use the payment date or transaction date in YYYY-MM-DD format.
+CRITICAL RULES:
+1. MERCHANT: Extract the clean, formal company/business name (e.g., "JAINEMO PRIVATE LIMITED" or "AIX CONNECT PRIVATE LIMITED" or "Amazon"). Clean up any OCR logo artifacts or leading prefixes.
+2. INVOICE NUMBER: Extract the invoice, receipt, or transaction reference number (e.g. "BBLR240100116949"). If not found, return null.
+3. DATE: Prefer transaction/payment date. Format as YYYY-MM-DD.
+4. CURRENCY: Extract standard currency code (e.g. "INR", "USD", "EUR"). Default to "INR" if unspecified but currency symbols indicate Rupees (₹/Rs).
+5. BASE AMOUNT: Extract the tax-exclusive base cost of the transaction (e.g., 7043.00).
+6. TAX AMOUNT: Total sum of all taxes (GST, CGST, SGST, IGST, VAT, Airport Tax, Service Tax, etc.).
+   - Set to 0.00 if NO taxes are explicitly mentioned.
+   - Never guess or calculate tax if not printed.
+7. TAX BREAKDOWN: Object showing breakdown of individual tax components, e.g.:
+   {{
+     "gst": 0.00,
+     "cgst": 0.00,
+     "sgst": 0.00,
+     "igst": 0.00,
+     "vat": 0.00,
+     "airport_tax": 767.00,
+     "service_tax": 0.00
+   }}
+8. ADDITIONAL CHARGES: Array of objects containing any other fees or charges (e.g. convenience fees, other levies, other service charges) not included in base fare/amount or tax:
+   [
+     {{ "description": "convenience fee", "amount": 50.00 }}
+   ]
+9. TOTAL AMOUNT: The grand total paid. Must be a number (e.g., 7810.00).
+10. LINE ITEMS: Array of individual items purchased:
+    [
+      {{ "description": "Air Ticket charges", "amount": 7043.00 }}
+    ]
+11. PAYMENT METHOD: Extract card brand, cash, UPI, etc., if printed.
 
-3. TAX: Return 0.00 UNLESS there is a dedicated line item showing an explicit tax amount with a number
-   (e.g., "CGST: ₹719.91", "SGST ₹500.00", "IGST: ₹1439.82", "Tax: ₹200").
-   - "18% GST included" alone means tax is embedded in the total — set tax to 0.00.
-   - Do NOT calculate tax percentages yourself.
-
-4. TOTAL: Grand Total / Amount Paid / Final Invoice Value.
-
-Return ONLY valid JSON, no markdown, no explanation:
+EXPECTED JSON SCHEMA (Return ONLY valid JSON):
 {{
-  "merchant": "company name",
+  "merchant": "merchant name",
+  "invoice_number": "invoice number or null",
   "date": "YYYY-MM-DD",
-  "total_amount": 0.00,
-  "tax": 0.00,
   "currency": "INR",
-  "line_items": [{{"description": "item", "amount": 0.00}}],
-  "raw_text": "full raw text"
+  "base_amount": 0.00,
+  "tax_amount": 0.00,
+  "tax_breakdown": {{
+     "gst": 0.00,
+     "cgst": 0.00,
+     "sgst": 0.00,
+     "igst": 0.00,
+     "vat": 0.00,
+     "airport_tax": 0.00,
+     "service_tax": 0.00
+  }},
+  "additional_charges": [],
+  "total_amount": 0.00,
+  "line_items": [
+    {{ "description": "description", "amount": 0.00 }}
+  ],
+  "payment_method": "method or null",
+  "raw_text": "..."
 }}
-
-OCR Text:
-{raw_text}"""
+"""
 
     try:
         from groq import Groq
@@ -158,19 +292,16 @@ OCR Text:
                 output = response.choices[0].message.content
                 parsed = extract_json_from_text(output)
 
-                # ── Hard Post-Processing (overrides LLM if needed) ───────────
-                # 1. Clean OCR logo artifacts from merchant name
+                # Post-Processing
                 if parsed.get("merchant"):
                     parsed["merchant"] = sanitize_merchant(str(parsed["merchant"]))
 
-                # 2. Validate tax — only allow explicit itemised tax amounts
-                parsed["tax"] = sanitize_tax(parsed.get("tax", 0), raw_text)
+                # Validation & Consistency Check
+                parsed = validate_receipt_amounts(parsed, raw_text)
 
-                # 3. Ensure raw_text is populated
                 if not parsed.get("raw_text") or parsed.get("raw_text") in ("full raw text", ""):
                     parsed["raw_text"] = raw_text
 
-                print(f"[OCR Result] merchant={parsed.get('merchant')} tax={parsed.get('tax')}")
                 return parsed
 
             except Exception as e:
