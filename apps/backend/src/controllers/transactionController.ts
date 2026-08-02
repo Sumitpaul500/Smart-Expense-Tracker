@@ -175,7 +175,21 @@ export const getAnalytics = async (req: AuthRequest, res: Response) => {
             const match = { ...baseMatch };
             if (dateQuery) {
                 if (match.date) {
-                    match.date = { $and: [match.date, dateQuery] };
+                    // Merge date conditions without using $and at field level (not supported in MongoDB)
+                    const merged: any = { ...match.date };
+                    if (dateQuery.$gte) {
+                        // Take the later of the two $gte bounds
+                        merged.$gte = merged.$gte
+                            ? (dateQuery.$gte > merged.$gte ? dateQuery.$gte : merged.$gte)
+                            : dateQuery.$gte;
+                    }
+                    if (dateQuery.$lte) {
+                        // Take the earlier of the two $lte bounds
+                        merged.$lte = merged.$lte
+                            ? (dateQuery.$lte < merged.$lte ? dateQuery.$lte : merged.$lte)
+                            : dateQuery.$lte;
+                    }
+                    match.date = merged;
                 } else {
                     match.date = dateQuery;
                 }

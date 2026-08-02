@@ -3,6 +3,7 @@
 	import {
 		Upload,
 		FileImage,
+		FileText,
 		CheckCircle2,
 		AlertCircle,
 		Loader2,
@@ -36,6 +37,7 @@
 		result = null;
 		error = '';
 		txSaved = false;
+		// Only create an object URL preview for images; PDFs get a special viewer
 		preview = URL.createObjectURL(f);
 	}
 
@@ -51,7 +53,9 @@
 		e.preventDefault();
 		isDragging = false;
 		const dropped = e.dataTransfer?.files[0];
-		if (dropped && dropped.type.startsWith('image/')) setFile(dropped);
+		if (dropped && (dropped.type.startsWith('image/') || dropped.type === 'application/pdf')) {
+			setFile(dropped);
+		}
 	}
 
 	// ── Upload & OCR ──────────────────────────────────────────────────────────
@@ -105,7 +109,7 @@
 
 <svelte:head>
 	<title>Scan Receipt — FinPilot AI</title>
-	<meta name="description" content="Upload a receipt image and extract structured data instantly using AI-powered OCR." />
+	<meta name="description" content="Upload a receipt image or PDF and extract structured data instantly using AI-powered OCR." />
 </svelte:head>
 
 <div class="space-y-6 max-w-4xl">
@@ -114,7 +118,7 @@
 		<div>
 			<h1 class="text-3xl font-bold tracking-tight">Scan Receipt</h1>
 			<p class="text-muted-foreground mt-1 text-sm">
-				Upload a receipt image and AI will extract merchant, amount and line items automatically.
+				Upload a receipt image or PDF and AI will extract merchant, amount and line items automatically.
 			</p>
 		</div>
 		{#if file}
@@ -151,29 +155,43 @@
 					</div>
 					<div class="text-center">
 						<p class="font-semibold text-foreground">Drop your receipt here</p>
-						<p class="text-sm text-muted-foreground mt-1">or click to browse — JPEG, PNG, WebP</p>
+						<p class="text-sm text-muted-foreground mt-1">or click to browse — JPEG, PNG, WebP, PDF</p>
 					</div>
 					<input
 						id="file-input"
 						type="file"
-						accept="image/jpeg,image/png,image/webp"
+						accept="image/jpeg,image/png,image/webp,application/pdf"
 						class="sr-only"
 						onchange={onFileChange}
 					/>
 				</div>
 			{:else}
-				<!-- Image preview -->
+				<!-- File preview -->
 				<div class="relative rounded-2xl overflow-hidden border border-border/60 bg-card shadow-xl">
-					<img src={preview} alt="Receipt preview" class="w-full object-contain max-h-80" />
+					{#if file?.type === 'application/pdf'}
+						<!-- PDF viewer -->
+						<iframe
+							src="{preview}#toolbar=0"
+							class="w-full h-80 border-0"
+							title="PDF Preview"
+						></iframe>
+					{:else}
+						<!-- Image preview -->
+						<img src={preview} alt="Receipt preview" class="w-full object-contain max-h-80" />
+					{/if}
 					<button
 						onclick={clearFile}
 						class="absolute top-3 right-3 w-8 h-8 rounded-full bg-background/80 backdrop-blur-sm border border-border flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
-						aria-label="Remove image"
+						aria-label="Remove file"
 					>
 						<X class="w-4 h-4" />
 					</button>
 					<div class="absolute bottom-3 left-3 px-3 py-1.5 rounded-lg bg-background/80 backdrop-blur-sm border border-border/60 text-xs text-muted-foreground flex items-center gap-1.5">
-						<FileImage class="w-3.5 h-3.5" />
+						{#if file?.type === 'application/pdf'}
+							<FileText class="w-3.5 h-3.5 text-red-400" />
+						{:else}
+							<FileImage class="w-3.5 h-3.5" />
+						{/if}
 						{file?.name}
 					</div>
 				</div>
@@ -208,9 +226,9 @@
 			{#if !file}
 				<div class="grid grid-cols-3 gap-3 mt-2">
 					{#each [
-						{ label: 'AI-Powered', desc: 'Gemini Vision OCR' },
+						{ label: 'AI-Powered', desc: 'Groq + OCR.space' },
 						{ label: 'Instant', desc: 'Results in seconds' },
-						{ label: 'Accurate', desc: 'Merchant + amounts' }
+						{ label: 'PDF + Images', desc: 'JPEG, PNG, WebP, PDF' }
 					] as card}
 						<div class="p-3 rounded-xl bg-card border border-border/60 text-center">
 							<p class="text-xs font-semibold text-foreground">{card.label}</p>

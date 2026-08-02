@@ -292,6 +292,51 @@ def validate_amounts(parsed: dict) -> dict:
     return parsed
 
 
+# ─── Travel date corrector ────────────────────────────────────────────────────
+
+def correct_travel_date(parsed: dict, raw_text: str) -> dict:
+    """
+    For airline / travel / hotel documents:
+    If the raw OCR text contains an explicit Flight Date / Travel Date /
+    Journey Date / Check-in Date, override the LLM-extracted date with that
+    value — because the LLM may have wrongly preferred the Invoice Date.
+
+    Handles formats: DD-MM-YYYY, DD/MM/YYYY, DD.MM.YYYY, YYYY-MM-DD
+    """
+    TRAVEL_DATE_PATTERNS = [
+        # Label first, then date value
+        r'(?:Flight\s+Date|Travel\s+Date|Journey\s+Date|Departure\s+Date|'
+        r'Check[\-\s]?in\s+Date|Date\s+of\s+Travel|Date\s+of\s+Journey|'
+        r'Date\s+of\s+Departure|Service\s+Date)\s*[:\-]?\s*'
+        r'(\d{1,2}[\-\/\.]\d{1,2}[\-\/\.]\d{2,4}|\d{4}[\-\/\.]\d{2}[\-\/\.]\d{2})',
+    ]
+
+    for pattern in TRAVEL_DATE_PATTERNS:
+        m = re.search(pattern, raw_text, re.IGNORECASE)
+        if m:
+            raw_date = m.group(1).strip()
+            # Try to normalise to YYYY-MM-DD
+            iso_date = None
+            for fmt in ("%d-%m-%Y", "%d/%m/%Y", "%d.%m.%Y",
+                        "%d-%m-%y", "%d/%m/%y",
+                        "%Y-%m-%d", "%Y/%m/%d"):
+                try:
+                    from datetime import datetime as _dt
+                    iso_date = _dt.strptime(raw_date, fmt).strftime("%Y-%m-%d")
+                    break
+                except ValueError:
+                    continue
+
+            if iso_date:
+                old_date = parsed.get("date")
+                parsed["date"] = iso_date
+                print(f"[TravelDate] Overrode date {old_date!r} -> {iso_date!r} "
+                      f"from pattern '{m.group(0).strip()}'")
+                return parsed
+
+    return parsed
+
+
 # ─── Canonical empty result ───────────────────────────────────────────────────
 
 def empty_result() -> dict:
@@ -341,21 +386,34 @@ async def parse_receipt(file: UploadFile = File(...)):
     image_bytes = await file.read()
     mime_type   = file.content_type or "image/jpeg"
 
+    # Detect PDF by content-type or filename extension
+    filename    = file.filename or ""
+    is_pdf      = (mime_type == "application/pdf" or filename.lower().endswith(".pdf"))
+    if is_pdf:
+        mime_type = "application/pdf"
+
     # ── Step 1: OCR via OCR.space engine 2 ───────────────────────────────────
     raw_text = ""
     try:
+        ocr_data_params = {
+            "apikey":            "helloworld",
+            "isOverlayRequired": False,
+            "language":          "eng",
+            "detectOrientation": True,
+            "scale":             True,
+            "ocrEngine":         2,
+        }
+        if is_pdf:
+            # For PDFs: extract text from first page; prefer text layer if present
+            ocr_data_params["filetype"]               = "PDF"
+            ocr_data_params["isTable"]                = True
+            ocr_data_params["OCREngine"]              = 2
+
         ocr_resp = requests.post(
             "https://api.ocr.space/parse/image",
-            data={
-                "apikey":            "helloworld",
-                "isOverlayRequired": False,
-                "language":          "eng",
-                "detectOrientation": True,
-                "scale":             True,
-                "ocrEngine":         2,
-            },
-            files={"file": (file.filename, image_bytes, mime_type)},
-            timeout=15,
+            data=ocr_data_params,
+            files={"file": (filename, image_bytes, mime_type)},
+            timeout=30,
         )
         if ocr_resp.status_code == 200:
             ocr_data = ocr_resp.json()
@@ -384,9 +442,13 @@ EXTRACTION RULES:
    Strip any single 2-letter prefix that is an OCR artifact (e.g. "AM JAINEMO" -> "JAINEMO PRIVATE LIMITED").
    Do NOT strip legitimate 3-letter abbreviations (e.g. "AIX CONNECT PRIVATE LIMITED" stays as-is).
 
-2. DATE — Extract exactly as printed. Priority order:
-   (a) Invoice Date  (b) Transaction / Payment Date  (c) any other date on the receipt.
+2. DATE — Extract the date the TRANSACTION / SERVICE actually occurred. Priority order:
+   (a) For travel/airline/hotel documents: use the TRAVEL DATE / FLIGHT DATE / CHECK-IN DATE / JOURNEY DATE — NOT the Invoice Date or Bill of Supply date.
+   (b) For shopping receipts: use the Purchase Date / Transaction Date / Sale Date.
+   (c) For service invoices: use the Service Date if present, otherwise fall back to Invoice Date.
+   (d) Last resort: any other date printed on the document.
    Return in ISO format: YYYY-MM-DD.
+   CRITICAL: For Air India / airline bills, "Flight Date" = the correct date. "Invoice Date" is an administrative date — do NOT use it.
    NEVER use today's date unless it explicitly appears on the receipt.
 
 3. INVOICE NUMBER — Extract the invoice/receipt/reference number. Return null if absent.
@@ -465,6 +527,9 @@ Return ONLY this JSON (no extra text):
 
                 # 4. Validate amounts
                 parsed = validate_amounts(parsed)
+
+                # 4.5 Correct travel date: for airline/hotel docs prefer Flight/Travel Date over Invoice Date
+                parsed = correct_travel_date(parsed, raw_text)
 
                 # 5. Ensure every canonical field exists
                 base = empty_result()
