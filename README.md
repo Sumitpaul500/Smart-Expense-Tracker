@@ -2,18 +2,43 @@
 
 <div align="center">
 
-![FinPilot Banner](https://img.shields.io/badge/FinPilot-AI%20Powered%20Finance%20Tracker-6366f1?style=for-the-badge&logo=bitcoin&logoColor=white)
+<br />
 
-[![SvelteKit](https://img.shields.io/badge/SvelteKit-5.0-FF3E00?style=flat-square&logo=svelte&logoColor=white)](https://kit.svelte.dev)
-[![Node.js](https://img.shields.io/badge/Node.js-Express-339933?style=flat-square&logo=nodedotjs&logoColor=white)](https://nodejs.org)
-[![MongoDB](https://img.shields.io/badge/MongoDB-6.0-47A248?style=flat-square&logo=mongodb&logoColor=white)](https://mongodb.com)
-[![FastAPI](https://img.shields.io/badge/FastAPI-Python-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://typescriptlang.org)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](LICENSE)
+# 🚀 **FinPilot AI — Smart Expense Tracker**
+### *Full-Stack Personal Finance Platform with Receipt OCR, Bank SMS Parser & LLM Financial Assistant*
+
+<br />
+
+[![SvelteKit](https://img.shields.io/badge/SvelteKit-5.0-FF3E00?style=for-the-badge&logo=svelte&logoColor=white)](https://kit.svelte.dev)
+[![Node.js](https://img.shields.io/badge/Node.js-Express-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org)
+[![MongoDB](https://img.shields.io/badge/MongoDB-6.0-47A248?style=for-the-badge&logo=mongodb&logoColor=white)](https://mongodb.com)
+[![FastAPI](https://img.shields.io/badge/FastAPI-Python-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://typescriptlang.org)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](LICENSE)
+
+<br />
 
 **A full-stack, AI-powered personal finance management platform** — track income, expenses & transfers; scan receipts with OCR; import bank SMS alerts automatically; get real-time financial advice from an LLM-backed assistant; and visualise your money through stunning 3D-style interactive charts.
 
 </div>
+
+---
+
+## 📑 Table of Contents
+
+- [✨ Key Features](#-key-features)
+- [🏗️ Architecture](#️-architecture)
+- [🛠️ Tech Stack](#️-tech-stack)
+- [📁 Project Structure](#-project-structure)
+- [🚀 Getting Started](#-getting-started)
+- [🔌 API Reference](#-api-reference)
+- [📊 Database Schema](#-database-schema)
+- [🧠 AI & ML Pipeline](#-ai--ml-pipeline)
+- [🎨 UI Highlights](#-ui-highlights)
+- [🔐 Security](#-security)
+- [📄 Environment Variables](#-environment-variables-summary)
+- [🗺️ Roadmap](#️-roadmap)
+- [📜 License](#-license)
 
 ---
 
