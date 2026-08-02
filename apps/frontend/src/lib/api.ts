@@ -225,6 +225,7 @@ export interface OcrResult {
 	tax_amount: number;
 	tax_breakdown: Record<string, number>;
 	additional_charges: Array<{ description: string; amount: number }>;
+	discount: number;
 	total_amount: number;
 	line_items: OcrLineItem[];
 	payment_method?: string | null;

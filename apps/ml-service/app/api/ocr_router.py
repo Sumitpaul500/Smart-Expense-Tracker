@@ -10,434 +10,463 @@ load_dotenv()
 router = APIRouter()
 
 
+# ─── JSON extraction ─────────────────────────────────────────────────────────
+
 def extract_json_from_text(text: str) -> dict:
-    """Parse JSON from AI response, stripping conversational wrapper text if present."""
+    """
+    Parse JSON from AI response.
+    Handles: pure JSON, ```json ... ```, conversational wrappers.
+    """
     cleaned = text.strip()
+    # Find outermost JSON object
     start = cleaned.find('{')
-    end = cleaned.rfind('}')
+    end   = cleaned.rfind('}')
     if start != -1 and end != -1 and end > start:
-        cleaned = cleaned[start:end+1]
+        cleaned = cleaned[start:end + 1]
     return json.loads(cleaned)
 
 
+# ─── OCR text pre-processing ──────────────────────────────────────────────────
+
 def preprocess_ocr_text(text: str) -> str:
     """
-    Clean up common OCR spelling mistakes and character confusions
-    before sending raw text to the AI model.
+    Correct common OCR spelling mistakes before sending to AI.
+    Never modifies numeric values.
     """
     if not text:
         return text
-    
-    # 1. Spelling corrections
-    corrections = {
-        r'(?i)\bairoort\b': 'Airport',
+
+    word_corrections = {
+        r'(?i)\bairoort\b':        'Airport',
+        r'(?i)\bairp0rt\b':        'Airport',
         r'(?i)\bairoort\s+taxes\b': 'Airport Taxes',
-        r'(?i)\bairoot\b': 'Airport',
-        r'(?i)\bthrouah\b': 'Through',
-        r'(?i)\bamaz0n\b': 'Amazon',
-        r'(?i)\brestaurent\b': 'Restaurant',
-        r'(?i)\bconvience\b': 'Convenience',
-        r'(?i)\bconvenience\s+fee\b': 'Convenience Fee',
-        r'(?i)\bconvenience\s+charges\b': 'Convenience Charges'
+        r'(?i)\bthrouah\b':        'Through',
+        r'(?i)\brestaurent\b':     'Restaurant',
+        r'(?i)\bamaz0n\b':         'Amazon',
+        r'(?i)\bconvience\b':      'Convenience',
+        r'(?i)\blnvoice\b':        'Invoice',
+        r'(?i)\bDatc\b':           'Date',
+        r'(?i)\bT0tal\b':          'Total',
+        r'(?i)\bGrand T0tal\b':    'Grand Total',
     }
-    
-    for pattern, replacement in corrections.items():
+    for pattern, replacement in word_corrections.items():
         text = re.sub(pattern, replacement, text)
-
-    # 2. Number cleaning: Correct O/o/I/l confusion in numbers
-    def fix_numbers(match):
-        val = match.group(0)
-        # Convert O/o to 0
-        val = val.replace('O', '0').replace('o', '0')
-        # Convert I/l to 1 in digits / decimals
-        val = re.sub(r'(?<=\d)[I|l](?=\d)', '1', val)
-        val = re.sub(r'(?<=\.)[I|l](?=\d)', '1', val)
-        val = re.sub(r'(?<=\d)[I|l](?=$)', '1', val)
-        return val
-
-    # Match tokens that look like numbers but contain confused letters
-    text = re.sub(r'\b[0-9OoIl\.,]{3,}\b', fix_numbers, text)
-
     return text
 
 
+# ─── Merchant sanitization ────────────────────────────────────────────────────
+
 def sanitize_merchant(name: str) -> str:
     """
-    Strip OCR logo artifacts that get prepended to real company names.
+    Strip ONLY 2-character OCR logo artifacts that get prepended to company names.
+    e.g.  "AM JAINEMO PRIVATE LIMITED"  →  "JAINEMO PRIVATE LIMITED"   ✓
+          "AIX CONNECT PRIVATE LIMITED" →  "AIX CONNECT PRIVATE LIMITED" ✓  (AIX kept)
+          "AP RELIANCE JIO"             →  "RELIANCE JIO"               ✓
+    Rule: strip a leading word of EXACTLY 2 uppercase letters followed by a space.
     """
     if not name:
         return name
     name = name.strip()
-    cleaned = re.sub(r'^[A-Z]{1,4}\s+(?=[A-Z])', '', name).strip()
+    # Only strip if the leading word is exactly 2 uppercase ASCII letters
+    cleaned = re.sub(r'^[A-Z]{2}\s+(?=[A-Z])', '', name).strip()
     return cleaned if cleaned else name
 
 
-def enforce_explicit_tax_and_base(parsed: dict, raw_text: str) -> dict:
+# ─── Tax enforcement ──────────────────────────────────────────────────────────
+
+def enforce_tax(parsed: dict, raw_text: str) -> dict:
     """
-    If the receipt doesn't have an explicit, separately listed numerical tax amount,
-    force tax_amount to 0.00 and base_amount to total_amount.
+    STRICT TAX RULE — never invent, estimate, or calculate tax.
+
+    Step 1: If OCR text contains "X% GST included" / "inclusive of tax" etc.
+            → tax is EMBEDDED in the price → force tax_amount = 0
+
+    Step 2: If tax_amount is already 0 → nothing to do.
+
+    Step 3: Confirm an explicit separate tax entry exists via:
+            (a) The tax amount value appears near a tax keyword in the raw OCR text.
+            (b) A line item description contains a tax keyword AND has amount > 0.
+            (c) Raw text matches classic "CGST: 500.00" style patterns.
+            If none confirmed → force tax_amount = 0.
     """
-    total = float(parsed.get("total_amount", 0.00) or 0.00)
     tax = float(parsed.get("tax_amount", 0.00) or 0.00)
-    
-    if tax > 0:
-        raw_lower = raw_text.lower()
-        explicit_patterns = [
-            r'cgst\s*[:\-\s]\s*[₹Rs\.]?\s*\d+',
-            r'sgst\s*[:\-\s]\s*[₹Rs\.]?\s*\d+',
-            r'igst\s*[:\-\s]\s*[₹Rs\.]?\s*\d+',
-            r'vat\s*[:\-\s]\s*[₹Rs\.]?\s*\d+',
-            r'tax\s*amount\s*[:\-\s]\s*[₹Rs\.]?\s*\d+',
-            r'taxes\s*[:\-\s]\s*[₹Rs\.]?\s*\d+',
-            r'service\s+tax\s*[:\-\s]\s*[₹Rs\.]?\s*\d+',
-            r'\bgst\s+\d+[\.,]\d{2}\b',
-            r'\btax\s+\d+[\.,]\d{2}\b',
-            r'airport\s+tax(es)?\s+\d+[\.,]\d{2}\b',
-            r'airport\s+tax(es)?\s*[:\-\s]\s*[₹Rs\.]?\s*\d+'
-        ]
-        
-        has_explicit = False
-        for pattern in explicit_patterns:
-            if re.search(pattern, raw_lower):
-                has_explicit = True
-                break
-                
-        if not has_explicit:
+    raw_lower = raw_text.lower()
+
+    # ── Step 1: inclusive-tax phrasing → always 0 ──────────────────────────
+    inclusive_patterns = [
+        r'\d+\s*%\s*gst\s+included',
+        r'gst\s+included',
+        r'tax\s+included',
+        r'incl\.\s*tax',
+        r'inclusive\s+of\s+tax',
+        r'inclusive\s+of\s+all\s+taxes',
+        r'all\s+taxes\s+included',
+        r'including\s+gst',
+        r'including\s+all\s+taxes',
+        r'taxes\s+included',
+        r'tax\s+is\s+included',
+    ]
+    for patt in inclusive_patterns:
+        if re.search(patt, raw_lower):
             parsed["tax_amount"] = 0.00
-            if "tax_breakdown" in parsed:
+            if isinstance(parsed.get("tax_breakdown"), dict):
                 parsed["tax_breakdown"] = {k: 0.00 for k in parsed["tax_breakdown"]}
-            
-            charges = sum(float(c.get("amount", 0.0) or 0.0) for c in parsed.get("additional_charges", []))
+            total   = float(parsed.get("total_amount", 0.00) or 0.00)
+            charges = sum(float(c.get("amount", 0.0) or 0.0)
+                          for c in (parsed.get("additional_charges") or []))
             parsed["base_amount"] = round(total - charges, 2)
-            print(f"[Sanitizer Override] No explicit tax found. Resetting tax to 0 and base to {parsed['base_amount']}")
-            
+            print(f"[TaxEnforcer] Inclusive-tax phrase → tax forced 0, base={parsed['base_amount']}")
+            return parsed
+
+    # ── Step 2: already 0, nothing to do ───────────────────────────────────
+    if tax == 0.0:
+        return parsed
+
+    # ── Step 3a: value-proximity check ─────────────────────────────────────
+    # Build numeric representations of the tax value to look for in raw text
+    tax_round = round(tax, 2)
+    tax_variants = set()
+    tax_variants.add(str(int(tax_round)) if tax_round == int(tax_round) else str(tax_round))
+    tax_variants.add(f"{tax_round:.2f}")
+    tax_variants.add(f"{tax_round:.2f}".replace(".", ","))
+    # e.g. 767 → {"767", "767.00", "767,00"}
+
+    TAX_LABEL_RE = re.compile(
+        r'(tax|gst|cgst|sgst|igst|vat|cess|duty|levy|airport|service\s*tax)',
+        re.IGNORECASE
+    )
+    for tv in tax_variants:
+        escaped = re.escape(tv)
+        # Check: tax label within 120 chars before/after the tax amount in the raw text
+        pattern = rf'(?:(.{{0,120}}){escaped}|{escaped}(.{{0,120}}))'
+        for m in re.finditer(escaped, raw_text, re.IGNORECASE):
+            start = max(0, m.start() - 120)
+            end   = min(len(raw_text), m.end() + 120)
+            context = raw_text[start:end]
+            if TAX_LABEL_RE.search(context):
+                print(f"[TaxEnforcer] Found tax value {tv} near tax label → keeping tax={tax}")
+                return parsed
+
+    # ── Step 3b: line_items tax classification ──────────────────────────────
+    TAX_KEYWORDS = ["tax", "gst", "cgst", "sgst", "igst", "vat", "cess",
+                    "duty", "levy", "airport charge", "service tax", "airport tax"]
+    for item in (parsed.get("line_items") or []):
+        desc = str(item.get("description", "")).lower()
+        amt  = float(item.get("amount", 0.0) or 0.0)
+        if any(k in desc for k in TAX_KEYWORDS) and amt > 0:
+            print(f"[TaxEnforcer] Tax line item '{item.get('description')}' amt={amt} → keeping")
+            return parsed
+
+    # ── Step 3c: classic "CGST: 500.00" patterns in raw text ───────────────
+    explicit_patterns = [
+        r'(cgst|sgst|igst)\s*[:\-]\s*[₹Rs\.]?\s*[\d,]+\.\d{2}',
+        r'(vat|cess|duty)\s*[:\-]\s*[₹Rs\.]?\s*[\d,]+\.\d{2}',
+        r'(gst|tax\s+amount|service\s+tax)\s*[:\-]\s*[₹Rs\.]?\s*[\d,]+\.\d{2}',
+        r'airport[\s\-]+tax(es)?[\s\-]+(pass[\s\-]+through[\s\-]+)?[\d,]+\.\d{2}',
+    ]
+    for patt in explicit_patterns:
+        if re.search(patt, raw_lower):
+            print(f"[TaxEnforcer] Classic tax pattern matched → keeping tax={tax}")
+            return parsed
+
+    # ── No confirmation found → force 0 ────────────────────────────────────
+    parsed["tax_amount"] = 0.00
+    if isinstance(parsed.get("tax_breakdown"), dict):
+        parsed["tax_breakdown"] = {k: 0.00 for k in parsed["tax_breakdown"]}
+    total   = float(parsed.get("total_amount", 0.00) or 0.00)
+    charges = sum(float(c.get("amount", 0.0) or 0.0)
+                  for c in (parsed.get("additional_charges") or []))
+    parsed["base_amount"] = round(total - charges, 2)
+    print(f"[TaxEnforcer] No explicit tax confirmed → tax forced 0, base={parsed['base_amount']}")
     return parsed
 
 
-def balance_components_from_line_items(parsed: dict) -> dict:
+
+# ─── Line-item component balancing ───────────────────────────────────────────
+
+def split_components_from_line_items(parsed: dict) -> dict:
     """
-    Intelligently classify and split base_amount, tax_amount, and additional_charges
-    from line items if the LLM lumped everything into the base_amount.
+    If the LLM returned base_amount == total_amount (treating total as base),
+    scan the line_items and reclassify tax/charge items to get the correct breakdown.
     """
-    line_items = parsed.get("line_items", [])
-    if not line_items or not isinstance(line_items, list):
+    line_items = parsed.get("line_items") or []
+    if not line_items:
         return parsed
-        
+
     total = float(parsed.get("total_amount", 0.00) or 0.00)
-    if total == 0:
+    base  = float(parsed.get("base_amount",  0.00) or 0.00)
+    tax   = float(parsed.get("tax_amount",   0.00) or 0.00)
+    chrgs = sum(float(c.get("amount", 0.0) or 0.0)
+                for c in (parsed.get("additional_charges") or []))
+
+    # Only reclassify if base ≈ total (indicating the LLM didn't separate components)
+    if not (abs(base - total) < 0.05 and tax == 0.0 and chrgs == 0.0):
         return parsed
 
-    base = float(parsed.get("base_amount", 0.0) or 0.0)
-    tax = float(parsed.get("tax_amount", 0.0) or 0.0)
-    
-    # Calculate sum of additional charges
-    charges_sum = sum(float(c.get("amount", 0.0) or 0.0) for c in parsed.get("additional_charges", []))
-    
-    # If the LLM returned base_amount equal to total_amount (or close to it) and tax/charges are zero,
-    # but the line items sum to the total and have specific tax/charge keywords:
-    if (abs(base - total) < 0.05) and (tax == 0.0) and (charges_sum == 0.0):
-        new_base = 0.0
-        new_tax = 0.0
-        new_charges = 0.0
-        new_additional_charges = []
-        new_tax_breakdown = parsed.get("tax_breakdown", {})
-        if not isinstance(new_tax_breakdown, dict):
-            new_tax_breakdown = {}
-            
-        tax_keywords = ["tax", "gst", "vat", "cgst", "sgst", "igst", "duty", "levy", "cess"]
-        charge_keywords = ["fee", "charge", "convenience", "handling", "service"]
-        
-        for item in line_items:
-            desc = str(item.get("description", "")).lower()
-            amt = float(item.get("amount", 0.0) or 0.0)
-            
-            if any(k in desc for k in tax_keywords):
-                new_tax += amt
-                if "airport" in desc:
-                    new_tax_breakdown["airport_tax"] = new_tax_breakdown.get("airport_tax", 0.0) + amt
-                elif "cgst" in desc:
-                    new_tax_breakdown["cgst"] = new_tax_breakdown.get("cgst", 0.0) + amt
-                elif "sgst" in desc:
-                    new_tax_breakdown["sgst"] = new_tax_breakdown.get("sgst", 0.0) + amt
-                elif "igst" in desc:
-                    new_tax_breakdown["igst"] = new_tax_breakdown.get("igst", 0.0) + amt
-                elif "vat" in desc:
-                    new_tax_breakdown["vat"] = new_tax_breakdown.get("vat", 0.0) + amt
-                elif "service" in desc:
-                    new_tax_breakdown["service_tax"] = new_tax_breakdown.get("service_tax", 0.0) + amt
-                else:
-                    new_tax_breakdown["gst"] = new_tax_breakdown.get("gst", 0.0) + amt
-            elif any(k in desc for k in charge_keywords):
-                new_charges += amt
-                new_additional_charges.append({
-                    "description": item.get("description", "Service Charge"),
-                    "amount": amt
-                })
-            else:
-                new_base += amt
+    TAX_KEYS  = ["tax", "gst", "cgst", "sgst", "igst", "vat", "cess",
+                 "duty", "levy", "airport charge", "service tax", "airport tax"]
+    CHRG_KEYS = ["fee", "convenience", "handling", "surcharge", "service charge"]
 
-        # Only apply if the sum of parsed line items matches the total (meaningful partition)
-        line_items_sum = new_base + new_tax + new_charges
-        if abs(line_items_sum - total) < 0.05:
-            parsed["base_amount"] = round(new_base, 2)
-            parsed["tax_amount"] = round(new_tax, 2)
-            parsed["tax_breakdown"] = new_tax_breakdown
-            parsed["additional_charges"] = new_additional_charges
-            print(f"[Post-Processor Split] base={new_base} tax={new_tax} charges={new_charges}")
-            
-    return parsed
+    new_base   = 0.0
+    new_tax    = 0.0
+    new_chrgs  = []
+    breakdown  = dict(parsed.get("tax_breakdown") or {})
 
+    for item in line_items:
+        desc = str(item.get("description", "")).lower()
+        amt  = float(item.get("amount", 0.0) or 0.0)
 
-def validate_receipt_amounts(parsed: dict, raw_text: str) -> dict:
-    """
-    Validate that: base_amount + tax_amount + sum(additional_charges) == total_amount.
-    Auto-corrects minor mismatches, otherwise raises ValueError.
-    """
-    base = float(parsed.get("base_amount", 0.00) or 0.00)
-    tax = float(parsed.get("tax_amount", 0.00) or 0.00)
-    
-    charges = 0.0
-    add_charges = parsed.get("additional_charges", [])
-    if not isinstance(add_charges, list):
-        add_charges = []
-    
-    for c in add_charges:
-        if isinstance(c, dict) and "amount" in c:
-            charges += float(c["amount"] or 0.00)
-            
-    total = float(parsed.get("total_amount", 0.00) or 0.00)
-    
-    # Recalculate tax if breakdown has different values
-    breakdown = parsed.get("tax_breakdown", {})
-    if isinstance(breakdown, dict):
-        bd_tax_sum = sum(float(v or 0.00) for v in breakdown.values())
-        if bd_tax_sum > 0 and abs(bd_tax_sum - tax) > 0.05:
-            tax = bd_tax_sum
-            parsed["tax_amount"] = tax
-
-    sum_components = base + tax + charges
-    diff = total - sum_components
-
-    # Automatically handle common validation discrepancies
-    if abs(diff) > 0.05:
-        # Case A: If base is zero but total and tax are non-zero, base is likely missing
-        if base == 0 and total > 0:
-            base = total - tax - charges
-            parsed["base_amount"] = round(base, 2)
-            diff = 0.0
-        # Case B: If total is zero, set it to the sum of components
-        elif total == 0:
-            total = sum_components
-            parsed["total_amount"] = round(total, 2)
-            diff = 0.0
-        # Case C: Other missing charge/levy, add as otherCharges
+        if any(k in desc for k in TAX_KEYS):
+            new_tax += amt
+            if   "airport" in desc:       breakdown["airport_tax"]   = breakdown.get("airport_tax",   0.0) + amt
+            elif "cgst"    in desc:       breakdown["cgst"]          = breakdown.get("cgst",          0.0) + amt
+            elif "sgst"    in desc:       breakdown["sgst"]          = breakdown.get("sgst",          0.0) + amt
+            elif "igst"    in desc:       breakdown["igst"]          = breakdown.get("igst",          0.0) + amt
+            elif "vat"     in desc:       breakdown["vat"]           = breakdown.get("vat",           0.0) + amt
+            elif "service" in desc:       breakdown["service_tax"]   = breakdown.get("service_tax",   0.0) + amt
+            else:                         breakdown["gst"]           = breakdown.get("gst",           0.0) + amt
+        elif any(k in desc for k in CHRG_KEYS):
+            new_chrgs.append({"description": item.get("description"), "amount": amt})
+            new_base += amt   # will be subtracted below
         else:
-            if diff > 0:
-                add_charges.append({
-                    "description": "Other Charges",
-                    "amount": round(diff, 2)
-                })
-                parsed["additional_charges"] = add_charges
-                diff = 0.0
+            new_base += amt
 
-    # Final re-validation
-    base = float(parsed.get("base_amount", 0.00) or 0.00)
-    tax = float(parsed.get("tax_amount", 0.00) or 0.00)
-    charges = sum(float(c.get("amount", 0.0) or 0.0) for c in parsed.get("additional_charges", []))
-    total = float(parsed.get("total_amount", 0.00) or 0.00)
-    
-    final_sum = round(base + tax + charges, 2)
-    if abs(final_sum - total) > 0.1:
-        raise ValueError(
-            f"Validation failed: Sum of components ({base} base + {tax} tax + {charges} charges = {final_sum}) "
-            f"does not match Total Amount ({total}). Discrepancy of {round(total - final_sum, 2)}."
-        )
-        
+    # Confirm the split sums to the total
+    total_check = new_base + new_tax + sum(c["amount"] for c in new_chrgs)
+    if abs(total_check - total) < 0.05:
+        parsed["base_amount"]        = round(new_base, 2)
+        parsed["tax_amount"]         = round(new_tax, 2)
+        parsed["tax_breakdown"]      = breakdown
+        parsed["additional_charges"] = new_chrgs
+        print(f"[Splitter] Reclassified → base={new_base} tax={new_tax} charges={new_chrgs}")
+
     return parsed
 
+
+# ─── Amount validation ────────────────────────────────────────────────────────
+
+def validate_amounts(parsed: dict) -> dict:
+    """
+    Verify:  base + tax + charges - discount == total
+    Auto-corrects minor rounding gaps; logs bigger mismatches.
+    """
+    base     = float(parsed.get("base_amount",  0.00) or 0.00)
+    tax      = float(parsed.get("tax_amount",   0.00) or 0.00)
+    discount = float(parsed.get("discount",     0.00) or 0.00)
+    total    = float(parsed.get("total_amount", 0.00) or 0.00)
+    charges  = sum(float(c.get("amount", 0.0) or 0.0)
+                   for c in (parsed.get("additional_charges") or []))
+
+    computed = round(base + tax + charges - discount, 2)
+    diff     = round(total - computed, 2)
+
+    if abs(diff) <= 0.05:
+        return parsed
+
+    # Auto-fix: if base is 0 but total is known, derive base
+    if base == 0 and total > 0:
+        parsed["base_amount"] = round(total - tax - charges + discount, 2)
+    elif abs(diff) < 5:
+        # Minor rounding: absorb into base
+        parsed["base_amount"] = round(base + diff, 2)
+    else:
+        print(f"[Validation] Mismatch: {base} base + {tax} tax + {charges} charges "
+              f"- {discount} discount = {computed}, expected {total}, diff = {diff}")
+
+    return parsed
+
+
+# ─── Canonical empty result ───────────────────────────────────────────────────
+
+def empty_result() -> dict:
+    return {
+        "merchant":          None,
+        "invoice_number":    None,
+        "date":              None,
+        "currency":          "INR",
+        "base_amount":       0.00,
+        "tax_amount":        0.00,
+        "tax_breakdown":     {"cgst": 0.00, "sgst": 0.00, "igst": 0.00,
+                              "gst": 0.00, "vat": 0.00,
+                              "airport_tax": 0.00, "service_tax": 0.00},
+        "additional_charges": [],
+        "discount":          0.00,
+        "total_amount":      0.00,
+        "line_items":        [],
+        "payment_method":    None,
+        "raw_text":          None,
+    }
+
+
+# ─── Main endpoint ────────────────────────────────────────────────────────────
 
 @router.post("/parse-receipt")
 async def parse_receipt(file: UploadFile = File(...)):
     """
-    Accept a receipt image upload (JPEG/PNG/WebP), perform OCR via OCR.space,
-    and structure the text into clean JSON using Groq.
+    Full pipeline:
+      Image → OCR.space → text cleanup → Groq LLM → post-processing → return
     """
     groq_key = os.getenv("GROQ_API_KEY")
 
-    # Demo fallback if no Groq key configured
+    # ── Demo fallback ────────────────────────────────────────────────────────
     if not groq_key or groq_key.strip() in ("YOUR_GROQ_API_KEY", "", "null"):
-        return {
-            "merchant": "AIX CONNECT PRIVATE LIMITED",
-            "invoice_number": "BBLR240100116949",
-            "date": "2024-01-25",
-            "currency": "INR",
-            "base_amount": 7043.00,
-            "tax_amount": 767.00,
-            "tax_breakdown": {
-                "gst": 0.00,
-                "cgst": 0.00,
-                "sgst": 0.00,
-                "igst": 0.00,
-                "vat": 0.00,
-                "airport_tax": 767.00,
-                "service_tax": 0.00
-            },
-            "additional_charges": [],
-            "total_amount": 7810.00,
-            "line_items": [
-                {"description": "Air Ticket charges", "amount": 7043.00},
-                {"description": "Airport Taxes-Pass Through", "amount": 767.00}
-            ],
-            "payment_method": None,
-            "raw_text": "(Demo mode — add GROQ_API_KEY to enable real OCR)",
-        }
+        demo = empty_result()
+        demo.update({
+            "merchant":       "JAINEMO PRIVATE LIMITED",
+            "invoice_number": "pay_NEeDyyapCdkfW",
+            "date":           "2023-12-20",
+            "base_amount":    7999.00,
+            "total_amount":   7999.00,
+            "line_items":     [{"description": "Sigma | DSA & Web Development", "amount": 7999.00}],
+            "raw_text":       "(Demo — add GROQ_API_KEY to use real OCR)",
+        })
+        return demo
 
     image_bytes = await file.read()
-    mime_type = file.content_type or "image/jpeg"
+    mime_type   = file.content_type or "image/jpeg"
 
-    # Step 1: Perform free OCR via OCR.space API using Engine 2
+    # ── Step 1: OCR via OCR.space engine 2 ───────────────────────────────────
     raw_text = ""
     try:
-        payload = {
-            "apikey": "helloworld",
-            "isOverlayRequired": False,
-            "language": "eng",
-            "detectOrientation": True,
-            "scale": True,
-            "ocrEngine": 2,
-        }
-        files = {"file": (file.filename, image_bytes, mime_type)}
-        ocr_response = requests.post(
+        ocr_resp = requests.post(
             "https://api.ocr.space/parse/image",
-            data=payload,
-            files=files,
-            timeout=15
+            data={
+                "apikey":            "helloworld",
+                "isOverlayRequired": False,
+                "language":          "eng",
+                "detectOrientation": True,
+                "scale":             True,
+                "ocrEngine":         2,
+            },
+            files={"file": (file.filename, image_bytes, mime_type)},
+            timeout=15,
         )
-        if ocr_response.status_code == 200:
-            ocr_data = ocr_response.json()
+        if ocr_resp.status_code == 200:
+            ocr_data = ocr_resp.json()
             if not ocr_data.get("IsErroredOnProcessing"):
-                parsed_results = ocr_data.get("ParsedResults", [])
-                if parsed_results:
-                    raw_text = parsed_results[0].get("ParsedText", "")
-        if not raw_text:
-            raw_text = f"Receipt scanned. Filename: {file.filename}."
+                results = ocr_data.get("ParsedResults", [])
+                if results:
+                    raw_text = results[0].get("ParsedText", "")
     except Exception as e:
-        print("[OCR.space Failed]", str(e))
-        raw_text = f"Receipt scanned. Filename: {file.filename}."
+        print(f"[OCR.space failed] {e}")
 
-    # Perform OCR text pre-cleaning
-    cleaned_ocr_text = preprocess_ocr_text(raw_text)
+    if not raw_text:
+        raw_text = f"Receipt. Filename: {file.filename}"
 
-    # Step 2: Use Groq LLM to structure the extracted text
-    prompt = f"""You are an elite financial document and receipt parser. Extract receipt details from the raw OCR text into the specified structured JSON format.
+    cleaned_text = preprocess_ocr_text(raw_text)
+    print(f"[OCR] First 400 chars:\n{cleaned_text[:400]}")
 
-RAW OCR TEXT:
-{cleaned_ocr_text}
+    # ── Step 2: Groq LLM structuring ─────────────────────────────────────────
+    prompt = f"""You are a financial document parser. Extract receipt data from the OCR text below and return ONLY a JSON object — no markdown, no prose.
 
-CRITICAL RULES:
-1. MERCHANT: Extract the clean, formal company/business name (e.g., "JAINEMO PRIVATE LIMITED" or "AIX CONNECT PRIVATE LIMITED" or "Amazon"). Clean up any OCR logo artifacts or leading prefixes.
-2. INVOICE NUMBER: Extract the invoice, receipt, or transaction reference number (e.g. "BBLR240100116949"). If not found, return null.
-3. DATE: Prefer transaction/payment date. Format as YYYY-MM-DD.
-4. CURRENCY: Extract standard currency code (e.g. "INR", "USD", "EUR"). Default to "INR" if unspecified but currency symbols indicate Rupees (₹/Rs).
-5. BASE AMOUNT: Extract the tax-exclusive base cost of the transaction (e.g., 7043.00).
-6. TAX AMOUNT: Total sum of all taxes (GST, CGST, SGST, IGST, VAT, Airport Tax, Service Tax, etc.).
-   - Set to 0.00 if NO taxes are explicitly mentioned.
-   - Never guess or calculate tax if not printed.
-7. TAX BREAKDOWN: Object showing breakdown of individual tax components, e.g.:
-   {{
-     "gst": 0.00,
-     "cgst": 0.00,
-     "sgst": 0.00,
-     "igst": 0.00,
-     "vat": 0.00,
-     "airport_tax": 767.00,
-     "service_tax": 0.00
-   }}
-8. ADDITIONAL CHARGES: Array of objects containing any other fees or charges (e.g. convenience fees, other levies, other service charges) not included in base fare/amount or tax:
-   [
-     {{ "description": "convenience fee", "amount": 50.00 }}
-   ]
-9. TOTAL AMOUNT: The grand total paid. Must be a number (e.g., 7810.00).
-10. LINE ITEMS: Array of individual items purchased:
-    [
-      {{ "description": "Air Ticket charges", "amount": 7043.00 }}
-    ]
-11. PAYMENT METHOD: Extract card brand, cash, UPI, etc., if printed.
+OCR TEXT:
+{cleaned_text}
 
-EXPECTED JSON SCHEMA (Return ONLY valid JSON):
+EXTRACTION RULES:
+
+1. MERCHANT — Use the primary legal company name printed at the top of the document.
+   Strip any single 2-letter prefix that is an OCR artifact (e.g. "AM JAINEMO" → "JAINEMO PRIVATE LIMITED").
+   Do NOT strip legitimate 3-letter abbreviations (e.g. "AIX CONNECT PRIVATE LIMITED" stays as-is).
+
+2. DATE — Extract exactly as printed. Priority order:
+   (a) Invoice Date  (b) Transaction / Payment Date  (c) any other date on the receipt.
+   Return in ISO format: YYYY-MM-DD.
+   NEVER use today's date unless it explicitly appears on the receipt.
+
+3. INVOICE NUMBER — Extract the invoice/receipt/reference number. Return null if absent.
+
+4. TAX — CRITICAL RULE:
+   ▸ If the receipt has an EXPLICIT separate tax line with a printed amount
+     (e.g. "Airport Taxes: 767.00", "CGST: 500.00", "SGST 250.00", "GST ₹100") → set tax_amount to that amount.
+   ▸ If the receipt says "18% GST included", "inclusive of tax", "taxes included" WITHOUT a
+     separate numeric line — the tax is ALREADY inside the total → set tax_amount to 0.00.
+   ▸ NEVER calculate, estimate, or reverse-engineer a tax value.
+   ▸ NEVER leave tax_amount null — always return a number (0.00 if absent).
+
+5. BASE AMOUNT — The pre-tax, pre-charge subtotal.
+   If not explicitly stated, derive as: total_amount - tax_amount - sum(additional_charges) + discount.
+
+6. ADDITIONAL CHARGES — Separate fees (convenience fee, handling, surcharge, etc.) that are
+   neither base fare nor taxes. Return as an array.
+
+7. DISCOUNT — Any discount or coupon deduction. Return 0.00 if absent.
+
+8. GRAND TOTAL — The final amount paid. Must match the figure on the receipt exactly.
+
+9. LINE ITEMS — Individual purchased items/services with their amounts.
+
+10. PAYMENT METHOD — Card type, UPI, Cash, etc. Return null if not mentioned.
+
+Return ONLY this JSON (no extra text):
 {{
-  "merchant": "merchant name",
-  "invoice_number": "invoice number or null",
-  "date": "YYYY-MM-DD",
-  "currency": "INR",
-  "base_amount": 0.00,
-  "tax_amount": 0.00,
-  "tax_breakdown": {{
-     "gst": 0.00,
-     "cgst": 0.00,
-     "sgst": 0.00,
-     "igst": 0.00,
-     "vat": 0.00,
-     "airport_tax": 0.00,
-     "service_tax": 0.00
-  }},
+  "merchant":          "exact company name",
+  "invoice_number":    "reference or null",
+  "date":              "YYYY-MM-DD",
+  "currency":          "INR",
+  "base_amount":       0.00,
+  "tax_amount":        0.00,
+  "tax_breakdown":     {{"cgst": 0.00, "sgst": 0.00, "igst": 0.00, "gst": 0.00, "vat": 0.00, "airport_tax": 0.00, "service_tax": 0.00}},
   "additional_charges": [],
-  "total_amount": 0.00,
-  "line_items": [
-    {{ "description": "description", "amount": 0.00 }}
-  ],
-  "payment_method": "method or null",
-  "raw_text": "..."
-}}
-"""
+  "discount":          0.00,
+  "total_amount":      0.00,
+  "line_items":        [{{"description": "item", "amount": 0.00}}],
+  "payment_method":    null,
+  "raw_text":          "..."
+}}"""
 
     try:
-        # pyrefly: ignore [missing-import]
-        from groq import Groq
+        from groq import Groq  # pyrefly: ignore [missing-import]
 
-        client = Groq(api_key=groq_key)
-        models_to_try = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
+        client  = Groq(api_key=groq_key)
+        models  = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
         last_err = None
 
-        for model_name in models_to_try:
+        for model_name in models:
             try:
-                response = client.chat.completions.create(
+                resp   = client.chat.completions.create(
                     model=model_name,
                     messages=[{"role": "user", "content": prompt}],
-                    temperature=0.1,
-                    max_tokens=1024,
+                    temperature=0.05,
+                    max_tokens=1200,
                 )
-                output = response.choices[0].message.content
-                print(f"[DEBUG GROQ RAW OUTPUT]:\n{output}")
+                output = resp.choices[0].message.content
+                print(f"[Groq/{model_name}] raw output:\n{output[:600]}")
                 parsed = extract_json_from_text(output)
 
-                # Post-Processing
-                print(f"[DEBUG PARSED INITIAL]: {parsed}")
+                # ── Post-processing pipeline ─────────────────────────────────
+                # 1. Merchant cleanup
                 if parsed.get("merchant"):
                     parsed["merchant"] = sanitize_merchant(str(parsed["merchant"]))
 
-                # Prevent tax calculation if no explicit tax line item is listed
-                parsed = enforce_explicit_tax_and_base(parsed, raw_text)
+                # 2. Enforce strict tax rules
+                parsed = enforce_tax(parsed, raw_text)
 
-                # Intelligently split components from line items
-                parsed = balance_components_from_line_items(parsed)
-                print(f"[DEBUG PARSED AFTER SPLIT]: {parsed}")
+                # 3. Reclassify if LLM merged all into base
+                parsed = split_components_from_line_items(parsed)
 
-                # Validation & Consistency Check
-                parsed = validate_receipt_amounts(parsed, raw_text)
+                # 4. Validate amounts
+                parsed = validate_amounts(parsed)
 
-                if not parsed.get("raw_text") or parsed.get("raw_text") in ("full raw text", ""):
-                    parsed["raw_text"] = raw_text
+                # 5. Ensure every canonical field exists
+                base = empty_result()
+                base.update(parsed)
+                if not base.get("raw_text") or base["raw_text"] in ("full raw text", "..."):
+                    base["raw_text"] = raw_text
 
-                return parsed
+                print(f"[Result] merchant={base.get('merchant')} "
+                      f"base={base.get('base_amount')} "
+                      f"tax={base.get('tax_amount')} "
+                      f"total={base.get('total_amount')}")
+                return base
 
             except Exception as e:
                 last_err = e
+                print(f"[Groq/{model_name}] failed: {e}")
                 continue
 
         raise HTTPException(
             status_code=503,
-            detail=f"All models failed. Last error: {str(last_err)}"
+            detail=f"All models failed. Last error: {str(last_err)}",
         )
 
     except HTTPException:

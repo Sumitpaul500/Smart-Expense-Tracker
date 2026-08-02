@@ -259,38 +259,67 @@
 
 					<!-- Summary fields -->
 					<div class="p-5 space-y-4">
+						<!-- Row 1: Merchant + Invoice Number -->
+						<div class="p-3 rounded-xl bg-secondary/40 border border-border/40">
+							<p class="text-[11px] text-muted-foreground uppercase font-semibold tracking-wider mb-1">Merchant</p>
+							<p class="font-semibold text-sm">{result.merchant ?? '—'}</p>
+						</div>
+
 						<div class="grid grid-cols-2 gap-3">
-							<div class="p-3 rounded-xl bg-secondary/40 border border-border/40 col-span-2">
-								<p class="text-[11px] text-muted-foreground uppercase font-semibold tracking-wider mb-1">Merchant</p>
-								<p class="font-semibold text-sm">{result.merchant ?? '—'}</p>
-							</div>
+							<!-- Date -->
 							<div class="p-3 rounded-xl bg-secondary/40 border border-border/40">
 								<p class="text-[11px] text-muted-foreground uppercase font-semibold tracking-wider mb-1 flex items-center gap-1">
-									<CalendarDays class="w-3 h-3" /> Date
+									<CalendarDays class="w-3 h-3" /> Invoice Date
 								</p>
 								<p class="font-semibold text-sm">{result.date ?? '—'}</p>
 							</div>
+
+							<!-- Invoice number -->
+							<div class="p-3 rounded-xl bg-secondary/40 border border-border/40">
+								<p class="text-[11px] text-muted-foreground uppercase font-semibold tracking-wider mb-1">Invoice No.</p>
+								<p class="font-semibold text-sm truncate">{result.invoice_number ?? '—'}</p>
+							</div>
+
+							<!-- Currency -->
 							<div class="p-3 rounded-xl bg-secondary/40 border border-border/40">
 								<p class="text-[11px] text-muted-foreground uppercase font-semibold tracking-wider mb-1">Currency</p>
 								<p class="font-semibold text-sm">{result.currency ?? 'INR'}</p>
 							</div>
+
+							<!-- Base amount -->
 							<div class="p-3 rounded-xl bg-secondary/40 border border-border/40">
 								<p class="text-[11px] text-muted-foreground uppercase font-semibold tracking-wider mb-1">Base Amount</p>
-								<p class="font-semibold text-sm">{fmt(result.base_amount ?? (result.total_amount - (result.tax_amount ?? 0)), result.currency)}</p>
+								<p class="font-semibold text-sm">{fmt(result.base_amount ?? 0, result.currency)}</p>
 							</div>
+
+							<!-- Tax — always shown, even when 0 -->
 							<div class="p-3 rounded-xl bg-secondary/40 border border-border/40">
 								<p class="text-[11px] text-muted-foreground uppercase font-semibold tracking-wider mb-1">Tax</p>
-								<p class="font-semibold text-sm">{fmt(result.tax_amount ?? 0.00, result.currency)}</p>
+								<p class="font-semibold text-sm {(result.tax_amount ?? 0) > 0 ? 'text-amber-400' : ''}">
+									{fmt(result.tax_amount ?? 0, result.currency)}
+								</p>
 							</div>
+
+							<!-- Additional Charges — always shown -->
 							<div class="p-3 rounded-xl bg-secondary/40 border border-border/40">
 								<p class="text-[11px] text-muted-foreground uppercase font-semibold tracking-wider mb-1">Additional Charges</p>
 								<p class="font-semibold text-sm">
-									{fmt(result.additional_charges?.reduce((sum, c) => sum + (c.amount || 0), 0) ?? 0, result.currency)}
+									{fmt(result.additional_charges?.reduce((s, c) => s + (c.amount || 0), 0) ?? 0, result.currency)}
 								</p>
 							</div>
-							<div class="p-3 rounded-xl bg-secondary/40 border border-border/40">
+
+							<!-- Discount (only show if > 0) -->
+							{#if (result.discount ?? 0) > 0}
+								<div class="p-3 rounded-xl bg-secondary/40 border border-emerald-500/30">
+									<p class="text-[11px] text-emerald-400 uppercase font-semibold tracking-wider mb-1">Discount</p>
+									<p class="font-semibold text-sm text-emerald-400">- {fmt(result.discount ?? 0, result.currency)}</p>
+								</div>
+							{/if}
+
+							<!-- Grand Total -->
+							<div class="p-3 rounded-xl bg-secondary/40 border border-border/40 {(result.discount ?? 0) > 0 ? '' : 'col-span-2'}">
 								<p class="text-[11px] text-muted-foreground uppercase font-semibold tracking-wider mb-1 flex items-center gap-1">
-									<Coins class="w-3 h-3" /> Total Amount
+									<Coins class="w-3 h-3" /> Grand Total
 								</p>
 								<p class="font-bold text-lg text-emerald-400">{fmt(result.total_amount, result.currency)}</p>
 							</div>
