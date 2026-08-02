@@ -71,6 +71,80 @@ def sanitize_merchant(name: str) -> str:
     return cleaned if cleaned else name
 
 
+def balance_components_from_line_items(parsed: dict) -> dict:
+    """
+    Intelligently classify and split base_amount, tax_amount, and additional_charges
+    from line items if the LLM lumped everything into the base_amount.
+    """
+    line_items = parsed.get("line_items", [])
+    if not line_items or not isinstance(line_items, list):
+        return parsed
+        
+    total = float(parsed.get("total_amount", 0.00) or 0.00)
+    if total == 0:
+        return parsed
+
+    base = float(parsed.get("base_amount", 0.0) or 0.0)
+    tax = float(parsed.get("tax_amount", 0.0) or 0.0)
+    
+    # Calculate sum of additional charges
+    charges_sum = sum(float(c.get("amount", 0.0) or 0.0) for c in parsed.get("additional_charges", []))
+    
+    # If the LLM returned base_amount equal to total_amount (or close to it) and tax/charges are zero,
+    # but the line items sum to the total and have specific tax/charge keywords:
+    if (abs(base - total) < 0.05) and (tax == 0.0) and (charges_sum == 0.0):
+        new_base = 0.0
+        new_tax = 0.0
+        new_charges = 0.0
+        new_additional_charges = []
+        new_tax_breakdown = parsed.get("tax_breakdown", {})
+        if not isinstance(new_tax_breakdown, dict):
+            new_tax_breakdown = {}
+            
+        tax_keywords = ["tax", "gst", "vat", "cgst", "sgst", "igst", "duty", "levy", "cess"]
+        charge_keywords = ["fee", "charge", "convenience", "handling", "service"]
+        
+        for item in line_items:
+            desc = str(item.get("description", "")).lower()
+            amt = float(item.get("amount", 0.0) or 0.0)
+            
+            if any(k in desc for k in tax_keywords):
+                new_tax += amt
+                if "airport" in desc:
+                    new_tax_breakdown["airport_tax"] = new_tax_breakdown.get("airport_tax", 0.0) + amt
+                elif "cgst" in desc:
+                    new_tax_breakdown["cgst"] = new_tax_breakdown.get("cgst", 0.0) + amt
+                elif "sgst" in desc:
+                    new_tax_breakdown["sgst"] = new_tax_breakdown.get("sgst", 0.0) + amt
+                elif "igst" in desc:
+                    new_tax_breakdown["igst"] = new_tax_breakdown.get("igst", 0.0) + amt
+                elif "vat" in desc:
+                    new_tax_breakdown["vat"] = new_tax_breakdown.get("vat", 0.0) + amt
+                elif "service" in desc:
+                    new_tax_breakdown["service_tax"] = new_tax_breakdown.get("service_tax", 0.0) + amt
+                else:
+                    new_tax_breakdown["gst"] = new_tax_breakdown.get("gst", 0.0) + amt
+            elif any(k in desc for k in charge_keywords):
+                new_charges += amt
+                new_additional_charges.append({
+                    "description": item.get("description", "Service Charge"),
+                    "amount": amt
+                })
+            else:
+                new_base += amt
+
+        # Only apply if the sum of parsed line items matches the total (meaningful partition)
+        line_items_sum = new_base + new_tax + new_charges
+        if abs(line_items_sum - total) < 0.05:
+            parsed["base_amount"] = round(new_base, 2)
+            parsed["tax_amount"] = round(new_tax, 2)
+            parsed["tax_breakdown"] = new_tax_breakdown
+            parsed["additional_charges"] = new_additional_charges
+            print(f"[Post-Processor Split] base={new_base} tax={new_tax} charges={new_charges}")
+            
+    return parsed
+
+
 def validate_receipt_amounts(parsed: dict, raw_text: str) -> dict:
     """
     Validate that: base_amount + tax_amount + sum(additional_charges) == total_amount.
@@ -275,6 +349,7 @@ EXPECTED JSON SCHEMA (Return ONLY valid JSON):
 """
 
     try:
+        # pyrefly: ignore [missing-import]
         from groq import Groq
 
         client = Groq(api_key=groq_key)
@@ -295,6 +370,9 @@ EXPECTED JSON SCHEMA (Return ONLY valid JSON):
                 # Post-Processing
                 if parsed.get("merchant"):
                     parsed["merchant"] = sanitize_merchant(str(parsed["merchant"]))
+
+                # Intelligently split components from line items
+                parsed = balance_components_from_line_items(parsed)
 
                 # Validation & Consistency Check
                 parsed = validate_receipt_amounts(parsed, raw_text)
