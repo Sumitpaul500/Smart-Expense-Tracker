@@ -1,0 +1,54 @@
+# ─── Environment & Secrets (CRITICAL SECURITY IGNORES) ────────────────────────
+.env
+.env.*
+!.env.example
+*.env
+*.pem
+*.key
+*.cert
+*.crt
+*.pfx
+
+# ─── Dependencies ─────────────────────────────────────────────────────────────
+node_modules/
+**/node_modules/
+venv/
+**/venv/
+.venv/
+**/env/
+**/ENV/
+
+# ─── Python Build & Cache ──────────────────────────────────────────────────────
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+.eggs/
+
+# ─── SvelteKit & Frontend Build Outputs ───────────────────────────────────────
+.svelte-kit/
+**/build/
+**/dist/
+**/.output/
+
+# ─── Logs & Runtime Data ──────────────────────────────────────────────────────
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ─── OS & IDE Files ───────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

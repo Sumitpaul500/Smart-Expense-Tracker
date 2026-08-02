@@ -1,0 +1,147 @@
+@import "tailwindcss";
+
+/* ─── Design Tokens (Dark Theme Default) ────────────────────────────────────── */
+@theme {
+	--font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+
+	/* Background layers */
+	--color-background:   #0a0b14;
+	--color-foreground:   #f1f5f9;
+
+	/* Card / Panel surfaces */
+	--color-card:             #0f1120;
+	--color-card-foreground:  #f1f5f9;
+
+	/* Primary — Violet */
+	--color-primary:            #7c3aed;
+	--color-primary-foreground: #ffffff;
+
+	/* Secondary / subtle */
+	--color-secondary:            #161829;
+	--color-secondary-foreground: #f1f5f9;
+
+	/* Muted */
+	--color-muted:            #161829;
+	--color-muted-foreground: #64748b;
+
+	/* Borders & inputs */
+	--color-border: #1e2340;
+	--color-input:  #161829;
+	--color-ring:   #7c3aed;
+
+	/* Semantic */
+	--color-destructive:            #ef4444;
+	--color-destructive-foreground: #ffffff;
+
+	/* Accent */
+	--color-emerald: #10b981;
+	--color-amber:   #f59e0b;
+	--color-cyan:    #06b6d4;
+	--color-indigo:  #6366f1;
+
+	/* Border radius scale */
+	--radius-sm: 0.5rem;
+	--radius:    0.75rem;
+	--radius-md: 0.75rem;
+	--radius-lg: 1rem;
+	--radius-xl: 1.25rem;
+	--radius-2xl: 1.5rem;
+}
+
+/* ─── Light Mode Override ─────────────────────────────────────────────────────── */
+:root.light {
+	--color-background:   #f5f7ff;
+	--color-foreground:   #0f1120;
+
+	--color-card:             #ffffff;
+	--color-card-foreground:  #0f1120;
+
+	--color-secondary:            #eff0fa;
+	--color-secondary-foreground: #0f1120;
+
+	--color-muted:            #eff0fa;
+	--color-muted-foreground: #64748b;
+
+	--color-border: #e2e5f1;
+	--color-input:  #f5f7ff;
+	--color-ring:   #7c3aed;
+
+	--color-destructive:            #dc2626;
+	--color-destructive-foreground: #ffffff;
+}
+
+/* ─── Base resets ─────────────────────────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+	border-color: var(--color-border);
+	box-sizing: border-box;
+}
+
+html {
+	scroll-behavior: smooth;
+}
+
+body {
+	background-color: var(--color-background);
+	color: var(--color-foreground);
+	font-family: var(--font-sans);
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+	min-height: 100dvh;
+	transition: background-color 0.3s ease, color 0.2s ease;
+}
+
+/* ─── Custom scrollbar ────────────────────────────────────────────────────────── */
+::-webkit-scrollbar {
+	width: 5px;
+	height: 5px;
+}
+::-webkit-scrollbar-track {
+	background: var(--color-background);
+}
+::-webkit-scrollbar-thumb {
+	background: var(--color-border);
+	border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+	background: var(--color-muted-foreground);
+}
+
+/* ─── Selection ───────────────────────────────────────────────────────────────── */
+::selection {
+	background-color: color-mix(in srgb, var(--color-primary) 35%, transparent);
+	color: var(--color-foreground);
+}
+
+/* ─── Focus ring ──────────────────────────────────────────────────────────────── */
+:focus-visible {
+	outline: 2px solid var(--color-ring);
+	outline-offset: 2px;
+}
+
+/* ─── Theme transition ────────────────────────────────────────────────────────── */
+:root {
+	color-scheme: dark;
+}
+:root.light {
+	color-scheme: light;
+}
+
+/* ─── 3D Canvas smooth entry ──────────────────────────────────────────────────── */
+@keyframes fadeUp {
+	from { opacity: 0; transform: translateY(16px); }
+	to   { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-up {
+	animation: fadeUp 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* ─── Floating glow pulse for 3D section ─────────────────────────────────────── */
+@keyframes glowPulse {
+	0%, 100% { opacity: 0.4; transform: scale(1); }
+	50%       { opacity: 0.7; transform: scale(1.08); }
+}
+.glow-pulse {
+	animation: glowPulse 4s ease-in-out infinite;
+}
