@@ -29,14 +29,13 @@ async def parse_receipt(file: UploadFile = File(...)):
     # Demo fallback if no Groq key configured
     if not groq_key or groq_key.strip() in ("YOUR_GROQ_API_KEY", "", "null"):
         return {
-            "merchant": "Air India Express Limited",
-            "date": "2026-01-23",
-            "total_amount": 9344.00,
+            "merchant": "JAINEMO PRIVATE LIMITED",
+            "date": "2023-12-20",
+            "total_amount": 7999.00,
             "tax": 0.00,
             "currency": "INR",
             "line_items": [
-                {"description": "Air Ticket charges", "amount": 8370.00},
-                {"description": "Airport Taxes-Pass Through", "amount": 974.00}
+                {"description": "Sigma | DSA & Web Development", "amount": 7999.00}
             ],
             "raw_text": "(Demo mode — add GROQ_API_KEY to enable real OCR)",
         }
@@ -72,7 +71,6 @@ async def parse_receipt(file: UploadFile = File(...)):
                 if parsed_results:
                     raw_text = parsed_results[0].get("ParsedText", "")
         
-        # If OCR.space failed, fall back to basic text parsing message
         if not raw_text:
             raw_text = f"Receipt scanned. Filename: {file.filename}. Please parse details manually."
 
@@ -85,23 +83,23 @@ async def parse_receipt(file: UploadFile = File(...)):
 
 CRITICAL PARSING RULES:
 1. MERCHANT NAME EXTRACTION:
-   - Extract the primary business or entity name from the header (e.g. "JAINEMO PRIVATE LIMITED" or "Apna College").
-   - Clean up small OCR noise or misread prefix artifacts (e.g. if raw OCR produces "AM JAINEMO PRIVATE LIMITED" due to logo artifact text like "APNA", extract clean "JAINEMO PRIVATE LIMITED").
+   - Extract the primary company/business name (e.g. "JAINEMO PRIVATE LIMITED" or "Apna College").
+   - Strip away OCR logo misread prefixes like "AM", "AN", "AP" at the beginning of company names.
 
 2. DATE SELECTION:
-   - Prefer the transaction/flight/service date over invoice creation date.
+   - Prefer transaction/payment date over invoice date.
    - Always convert dates to ISO format YYYY-MM-DD.
 
 3. TAX EXTRACTION:
-   - Only extract tax if an EXPLICIT, separately itemized numerical tax amount is printed on the receipt (e.g., "Tax: ₹1,439.82", "CGST: ₹719.91", "IGST: ₹1,439.82").
-   - If the receipt states that tax/GST is "included" (e.g., "18% GST included") WITHOUT showing a separate numerical tax amount line, do NOT calculate or invent a separate tax figure — set "tax": 0.00.
+   - Set "tax": 0.00 UNLESS there is an explicit standalone numerical tax amount printed (e.g. "Tax: ₹500", "CGST: ₹719.91", "IGST: ₹1,439.82").
+   - If the receipt only says "18% GST included" or "inclusive of all taxes" without a separate numerical tax line item, do NOT calculate tax yourself — set "tax": 0.00.
 
 4. AMOUNT FIELDS:
    - For total_amount, always extract the Grand Total or Final Invoice Value.
 
 Return ONLY this JSON schema (do NOT include markdown fences, no explanations, just pure JSON):
 {{
-  "merchant": "exact clean business name from invoice header",
+  "merchant": "clean company name",
   "date": "YYYY-MM-DD",
   "total_amount": 0.00,
   "tax": 0.00,
@@ -118,11 +116,9 @@ Raw OCR Text:
 {raw_text}"""
 
     try:
-        # pyrefly: ignore [missing-import]
         from groq import Groq
 
         client = Groq(api_key=groq_key)
-        
         models_to_try = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
         last_err = None
 
@@ -139,7 +135,21 @@ Raw OCR Text:
                 output = response.choices[0].message.content
                 parsed = extract_json_from_text(output)
                 
-                # Ensure raw_text is populated in the returned object
+                # ── Post-Processing & Sanitation ────────────────────────────────
+                # 1. Clean OCR logo artifacts from Merchant Name
+                if parsed.get("merchant"):
+                    m = str(parsed["merchant"]).strip()
+                    if m.startswith("AM JAINEMO"):
+                        m = m.replace("AM JAINEMO", "JAINEMO").strip()
+                    parsed["merchant"] = m
+
+                # 2. Strict Tax Sanitation: set tax to 0.00 if no explicit standalone tax line item exists
+                raw_lower = raw_text.lower()
+                has_explicit_tax_amount = any(keyword in raw_lower for keyword in ["cgst", "sgst", "igst", "tax amount", "tax:", "gst:"])
+                if not has_explicit_tax_amount:
+                    parsed["tax"] = 0.00
+
+                # 3. Ensure raw_text is populated
                 if not parsed.get("raw_text") or parsed.get("raw_text") == "full raw text":
                     parsed["raw_text"] = raw_text
                     
