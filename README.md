@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # 💰 Smart Expense Tracker — FinPilot AI
 
 <div align="center">
@@ -597,6 +596,3 @@ Made with ❤️ using SvelteKit, Node.js, FastAPI, and Groq AI
 ⭐ **Star this repo if you found it useful!**
 
 </div>
-=======
-# Smart-Expense-Tracker
->>>>>>> 2d9df5b15f8b1e542afbb8e803bd19b714f43526
