@@ -11,11 +11,12 @@ router = APIRouter()
 
 
 def extract_json_from_text(text: str) -> dict:
-    """Parse JSON from AI response, stripping markdown fences if present."""
+    """Parse JSON from AI response, stripping conversational wrapper text if present."""
     cleaned = text.strip()
-    if cleaned.startswith("```"):
-        lines = cleaned.split("\n")
-        cleaned = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
+    start = cleaned.find('{')
+    end = cleaned.rfind('}')
+    if start != -1 and end != -1 and end > start:
+        cleaned = cleaned[start:end+1]
     return json.loads(cleaned)
 
 
@@ -69,6 +70,48 @@ def sanitize_merchant(name: str) -> str:
     name = name.strip()
     cleaned = re.sub(r'^[A-Z]{1,4}\s+(?=[A-Z])', '', name).strip()
     return cleaned if cleaned else name
+
+
+def enforce_explicit_tax_and_base(parsed: dict, raw_text: str) -> dict:
+    """
+    If the receipt doesn't have an explicit, separately listed numerical tax amount,
+    force tax_amount to 0.00 and base_amount to total_amount.
+    """
+    total = float(parsed.get("total_amount", 0.00) or 0.00)
+    tax = float(parsed.get("tax_amount", 0.00) or 0.00)
+    
+    if tax > 0:
+        raw_lower = raw_text.lower()
+        explicit_patterns = [
+            r'cgst\s*[:\-\s]\s*[₹Rs\.]?\s*\d+',
+            r'sgst\s*[:\-\s]\s*[₹Rs\.]?\s*\d+',
+            r'igst\s*[:\-\s]\s*[₹Rs\.]?\s*\d+',
+            r'vat\s*[:\-\s]\s*[₹Rs\.]?\s*\d+',
+            r'tax\s*amount\s*[:\-\s]\s*[₹Rs\.]?\s*\d+',
+            r'taxes\s*[:\-\s]\s*[₹Rs\.]?\s*\d+',
+            r'service\s+tax\s*[:\-\s]\s*[₹Rs\.]?\s*\d+',
+            r'\bgst\s+\d+[\.,]\d{2}\b',
+            r'\btax\s+\d+[\.,]\d{2}\b',
+            r'airport\s+tax(es)?\s+\d+[\.,]\d{2}\b',
+            r'airport\s+tax(es)?\s*[:\-\s]\s*[₹Rs\.]?\s*\d+'
+        ]
+        
+        has_explicit = False
+        for pattern in explicit_patterns:
+            if re.search(pattern, raw_lower):
+                has_explicit = True
+                break
+                
+        if not has_explicit:
+            parsed["tax_amount"] = 0.00
+            if "tax_breakdown" in parsed:
+                parsed["tax_breakdown"] = {k: 0.00 for k in parsed["tax_breakdown"]}
+            
+            charges = sum(float(c.get("amount", 0.0) or 0.0) for c in parsed.get("additional_charges", []))
+            parsed["base_amount"] = round(total - charges, 2)
+            print(f"[Sanitizer Override] No explicit tax found. Resetting tax to 0 and base to {parsed['base_amount']}")
+            
+    return parsed
 
 
 def balance_components_from_line_items(parsed: dict) -> dict:
@@ -365,14 +408,20 @@ EXPECTED JSON SCHEMA (Return ONLY valid JSON):
                     max_tokens=1024,
                 )
                 output = response.choices[0].message.content
+                print(f"[DEBUG GROQ RAW OUTPUT]:\n{output}")
                 parsed = extract_json_from_text(output)
 
                 # Post-Processing
+                print(f"[DEBUG PARSED INITIAL]: {parsed}")
                 if parsed.get("merchant"):
                     parsed["merchant"] = sanitize_merchant(str(parsed["merchant"]))
 
+                # Prevent tax calculation if no explicit tax line item is listed
+                parsed = enforce_explicit_tax_and_base(parsed, raw_text)
+
                 # Intelligently split components from line items
                 parsed = balance_components_from_line_items(parsed)
+                print(f"[DEBUG PARSED AFTER SPLIT]: {parsed}")
 
                 # Validation & Consistency Check
                 parsed = validate_receipt_amounts(parsed, raw_text)
