@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import requests
 from fastapi import APIRouter, UploadFile, File, HTTPException
@@ -16,6 +17,39 @@ def extract_json_from_text(text: str) -> dict:
         lines = cleaned.split("\n")
         cleaned = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
     return json.loads(cleaned)
+
+
+def sanitize_merchant(name: str) -> str:
+    """
+    Strip OCR logo artifacts that get prepended to real company names.
+    e.g. "AM JAINEMO PRIVATE LIMITED" → "JAINEMO PRIVATE LIMITED"
+         "AP RELIANCE JIO" → "RELIANCE JIO"
+    """
+    if not name:
+        return name
+    name = name.strip()
+    # Strip a leading 1-4 uppercase-only word followed by a space
+    cleaned = re.sub(r'^[A-Z]{1,4}\s+(?=[A-Z])', '', name).strip()
+    return cleaned if cleaned else name
+
+
+def sanitize_tax(tax_value, raw_text: str) -> float:
+    """
+    Only accept a tax value from the LLM if an explicit, standalone
+    numerical tax line is found in the raw OCR text.
+    Patterns that count as explicit: 'CGST ₹xxx', 'SGST: 500', 'Tax: ₹1,439'
+    Patterns that do NOT count: '18% GST included', 'inclusive of tax'
+    """
+    # Check for an explicit tax line in OCR text: a tax keyword adjacent to a number
+    explicit_tax_pattern = re.search(
+        r'(CGST|SGST|IGST|Tax\s*:|GST\s*:)\s*[₹Rs.]?\s*[\d,]+\.?\d*',
+        raw_text,
+        re.IGNORECASE
+    )
+    if explicit_tax_pattern:
+        return float(tax_value) if tax_value else 0.00
+    # No standalone numeric tax line found — return 0
+    return 0.00
 
 
 @router.post("/parse-receipt")
@@ -43,16 +77,16 @@ async def parse_receipt(file: UploadFile = File(...)):
     image_bytes = await file.read()
     mime_type = file.content_type or "image/jpeg"
 
-    # Step 1: Perform free OCR via OCR.space API using Engine 2 (extremely accurate for tables/receipts)
+    # Step 1: OCR via OCR.space Engine 2
     raw_text = ""
     try:
         payload = {
-            "apikey": "helloworld",  # Free public key for OCR.space
+            "apikey": "helloworld",
             "isOverlayRequired": False,
             "language": "eng",
             "detectOrientation": True,
             "scale": True,
-            "ocrEngine": 2,  # Use Engine 2 for high accuracy on receipts and numbers
+            "ocrEngine": 2,
         }
         files = {"file": (file.filename, image_bytes, mime_type)}
         ocr_response = requests.post(
@@ -61,58 +95,49 @@ async def parse_receipt(file: UploadFile = File(...)):
             files=files,
             timeout=15
         )
-        
         if ocr_response.status_code == 200:
             ocr_data = ocr_response.json()
-            if ocr_data.get("IsErroredOnProcessing"):
-                print("[OCR.space Error]", ocr_data.get("ErrorMessage"))
-            else:
+            if not ocr_data.get("IsErroredOnProcessing"):
                 parsed_results = ocr_data.get("ParsedResults", [])
                 if parsed_results:
                     raw_text = parsed_results[0].get("ParsedText", "")
-        
         if not raw_text:
-            raw_text = f"Receipt scanned. Filename: {file.filename}. Please parse details manually."
-
+            raw_text = f"Receipt scanned. Filename: {file.filename}."
     except Exception as e:
-        print("[OCR.space Request Failed]", str(e))
-        raw_text = f"Receipt scanned. Filename: {file.filename}. Error performing online OCR."
+        print("[OCR.space Failed]", str(e))
+        raw_text = f"Receipt scanned. Filename: {file.filename}."
 
-    # Step 2: Use Groq LLM to structure the extracted text
-    prompt = f"""You are an elite invoice and receipt parser. Analyze the raw OCR text and structure it into a clean JSON output.
+    print(f"[OCR Raw Text]:\n{raw_text[:500]}")  # Debug: log first 500 chars
 
-CRITICAL PARSING RULES:
-1. MERCHANT NAME EXTRACTION:
-   - Extract the primary company/business name (e.g. "JAINEMO PRIVATE LIMITED" or "Apna College").
-   - Strip away OCR logo misread prefixes like "AM", "AN", "AP" at the beginning of company names.
+    # Step 2: Groq LLM structuring
+    prompt = f"""You are an expert invoice parser. Extract data from the following OCR text into JSON.
 
-2. DATE SELECTION:
-   - Prefer transaction/payment date over invoice date.
-   - Always convert dates to ISO format YYYY-MM-DD.
+RULES (follow exactly):
+1. MERCHANT: Extract the PRIMARY company name from the document header only.
+   - Ignore any small logo text or brand watermarks that appear before the company name.
+   - Only return the legal entity name printed prominently at the top (e.g. "JAINEMO PRIVATE LIMITED").
 
-3. TAX EXTRACTION:
-   - Set "tax": 0.00 UNLESS there is an explicit standalone numerical tax amount printed (e.g. "Tax: ₹500", "CGST: ₹719.91", "IGST: ₹1,439.82").
-   - If the receipt only says "18% GST included" or "inclusive of all taxes" without a separate numerical tax line item, do NOT calculate tax yourself — set "tax": 0.00.
+2. DATE: Use the payment date or transaction date in YYYY-MM-DD format.
 
-4. AMOUNT FIELDS:
-   - For total_amount, always extract the Grand Total or Final Invoice Value.
+3. TAX: Return 0.00 UNLESS there is a dedicated line item showing an explicit tax amount with a number
+   (e.g., "CGST: ₹719.91", "SGST ₹500.00", "IGST: ₹1439.82", "Tax: ₹200").
+   - "18% GST included" alone means tax is embedded in the total — set tax to 0.00.
+   - Do NOT calculate tax percentages yourself.
 
-Return ONLY this JSON schema (do NOT include markdown fences, no explanations, just pure JSON):
+4. TOTAL: Grand Total / Amount Paid / Final Invoice Value.
+
+Return ONLY valid JSON, no markdown, no explanation:
 {{
-  "merchant": "clean company name",
+  "merchant": "company name",
   "date": "YYYY-MM-DD",
   "total_amount": 0.00,
   "tax": 0.00,
   "currency": "INR",
-  "line_items": [
-    {{"description": "item name", "amount": 0.00}}
-  ],
+  "line_items": [{{"description": "item", "amount": 0.00}}],
   "raw_text": "full raw text"
 }}
 
-If a field cannot be found, use null for strings and 0 for numbers.
-
-Raw OCR Text:
+OCR Text:
 {raw_text}"""
 
     try:
@@ -126,41 +151,35 @@ Raw OCR Text:
             try:
                 response = client.chat.completions.create(
                     model=model_name,
-                    messages=[
-                        {"role": "user", "content": prompt}
-                    ],
+                    messages=[{"role": "user", "content": prompt}],
                     temperature=0.1,
                     max_tokens=1024,
                 )
                 output = response.choices[0].message.content
                 parsed = extract_json_from_text(output)
-                
-                # ── Post-Processing & Sanitation ────────────────────────────────
-                # 1. Clean OCR logo artifacts from Merchant Name
-                if parsed.get("merchant"):
-                    m = str(parsed["merchant"]).strip()
-                    if m.startswith("AM JAINEMO"):
-                        m = m.replace("AM JAINEMO", "JAINEMO").strip()
-                    parsed["merchant"] = m
 
-                # 2. Strict Tax Sanitation: set tax to 0.00 if no explicit standalone tax line item exists
-                raw_lower = raw_text.lower()
-                has_explicit_tax_amount = any(keyword in raw_lower for keyword in ["cgst", "sgst", "igst", "tax amount", "tax:", "gst:"])
-                if not has_explicit_tax_amount:
-                    parsed["tax"] = 0.00
+                # ── Hard Post-Processing (overrides LLM if needed) ───────────
+                # 1. Clean OCR logo artifacts from merchant name
+                if parsed.get("merchant"):
+                    parsed["merchant"] = sanitize_merchant(str(parsed["merchant"]))
+
+                # 2. Validate tax — only allow explicit itemised tax amounts
+                parsed["tax"] = sanitize_tax(parsed.get("tax", 0), raw_text)
 
                 # 3. Ensure raw_text is populated
-                if not parsed.get("raw_text") or parsed.get("raw_text") == "full raw text":
+                if not parsed.get("raw_text") or parsed.get("raw_text") in ("full raw text", ""):
                     parsed["raw_text"] = raw_text
-                    
+
+                print(f"[OCR Result] merchant={parsed.get('merchant')} tax={parsed.get('tax')}")
                 return parsed
+
             except Exception as e:
                 last_err = e
                 continue
 
         raise HTTPException(
             status_code=503,
-            detail=f"All structuring models failed. Last error: {str(last_err)}"
+            detail=f"All models failed. Last error: {str(last_err)}"
         )
 
     except HTTPException:
