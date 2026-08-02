@@ -1,6 +1,22 @@
 import os
 import re
 import json
+import sys
+
+# Force UTF-8 output so Windows charmap encoding never crashes on Unicode chars
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
+
+def safe_log(msg: str) -> None:
+    """Print safely on any platform/encoding. Non-encodable chars become '?'."""
+    try:
+        print(msg)
+    except UnicodeEncodeError:
+        print(msg.encode("ascii", errors="replace").decode("ascii"))
+
 import requests
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from dotenv import load_dotenv
@@ -238,7 +254,7 @@ def split_components_from_line_items(parsed: dict) -> dict:
         parsed["tax_amount"]         = round(new_tax, 2)
         parsed["tax_breakdown"]      = breakdown
         parsed["additional_charges"] = new_chrgs
-        print(f"[Splitter] Reclassified → base={new_base} tax={new_tax} charges={new_chrgs}")
+        print(f"[Splitter] Reclassified -> base={new_base} tax={new_tax} charges={new_chrgs}")
 
     return parsed
 
@@ -357,15 +373,15 @@ async def parse_receipt(file: UploadFile = File(...)):
     print(f"[OCR] First 400 chars:\n{cleaned_text[:400]}")
 
     # ── Step 2: Groq LLM structuring ─────────────────────────────────────────
-    prompt = f"""You are a financial document parser. Extract receipt data from the OCR text below and return ONLY a JSON object — no markdown, no prose.
+    prompt = f"""You are a financial document parser. Extract receipt data from the OCR text below and return ONLY a JSON object - no markdown, no prose.
 
 OCR TEXT:
 {cleaned_text}
 
 EXTRACTION RULES:
 
-1. MERCHANT — Use the primary legal company name printed at the top of the document.
-   Strip any single 2-letter prefix that is an OCR artifact (e.g. "AM JAINEMO" → "JAINEMO PRIVATE LIMITED").
+1. MERCHANT - Use the primary legal company name printed at the top of the document.
+   Strip any single 2-letter prefix that is an OCR artifact (e.g. "AM JAINEMO" -> "JAINEMO PRIVATE LIMITED").
    Do NOT strip legitimate 3-letter abbreviations (e.g. "AIX CONNECT PRIVATE LIMITED" stays as-is).
 
 2. DATE — Extract exactly as printed. Priority order:
@@ -375,13 +391,13 @@ EXTRACTION RULES:
 
 3. INVOICE NUMBER — Extract the invoice/receipt/reference number. Return null if absent.
 
-4. TAX — CRITICAL RULE:
-   ▸ If the receipt has an EXPLICIT separate tax line with a printed amount
-     (e.g. "Airport Taxes: 767.00", "CGST: 500.00", "SGST 250.00", "GST ₹100") → set tax_amount to that amount.
-   ▸ If the receipt says "18% GST included", "inclusive of tax", "taxes included" WITHOUT a
-     separate numeric line — the tax is ALREADY inside the total → set tax_amount to 0.00.
-   ▸ NEVER calculate, estimate, or reverse-engineer a tax value.
-   ▸ NEVER leave tax_amount null — always return a number (0.00 if absent).
+4. TAX - CRITICAL RULE:
+   * If the receipt has an EXPLICIT separate tax line with a printed amount
+     (e.g. "Airport Taxes: 767.00", "CGST: 500.00", "SGST 250.00", "GST 100") -> set tax_amount to that exact amount.
+   * If the receipt says "18% GST included", "inclusive of tax", "taxes included" WITHOUT a
+     separate numeric line -- the tax is ALREADY inside the total -> set tax_amount to 0.00.
+   * NEVER calculate, estimate, or reverse-engineer a tax value.
+   * NEVER leave tax_amount null -- always return a number (0.00 if absent).
 
 5. BASE AMOUNT — The pre-tax, pre-charge subtotal.
    If not explicitly stated, derive as: total_amount - tax_amount - sum(additional_charges) + discount.
@@ -430,7 +446,10 @@ Return ONLY this JSON (no extra text):
                     max_tokens=1200,
                 )
                 output = resp.choices[0].message.content
-                print(f"[Groq/{model_name}] raw output:\n{output[:600]}")
+                # Strip any non-ASCII chars from Groq output before logging
+                # (the LLM sometimes outputs Unicode arrows in explanatory text)
+                output_safe = output.encode("ascii", errors="replace").decode("ascii")
+                safe_log(f"[Groq/{model_name}] raw output:\n{output_safe[:600]}")
                 parsed = extract_json_from_text(output)
 
                 # ── Post-processing pipeline ─────────────────────────────────
