@@ -107,14 +107,19 @@
 This is a **monorepo** containing three independent services:
 
 ```
-Smart Expense Tracker/
-├── apps/
-│   ├── frontend/          # SvelteKit 5 + Vite + Chart.js + Threlte (3D)
-│   ├── backend/           # Node.js + Express + TypeScript REST API
-│   └── ml-service/        # Python FastAPI — OCR & AI microservice
-├── docker-compose.yml     # MongoDB + Redis via Docker
-├── start-all.ps1          # One-command startup script (Windows)
-└── seed-demo.js           # Demo data seeder
+User
+   │
+   ▼
+Frontend (SvelteKit)
+   │
+   ▼
+Express Backend
+   ├────────► MongoDB
+   ├────────► Redis
+   └────────► FastAPI (OCR + AI)
+                    │
+                    ▼
+                Gemini/OpenAI
 ```
 
 ### Data Flow
