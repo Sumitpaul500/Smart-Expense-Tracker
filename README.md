@@ -107,19 +107,18 @@
 This is a **monorepo** containing three independent services:
 
 ```
-User
-   │
-   ▼
-Frontend (SvelteKit)
-   │
-   ▼
-Express Backend
-   ├────────► MongoDB
-   ├────────► Redis
-   └────────► FastAPI (OCR + AI)
-                    │
-                    ▼
-                Gemini/OpenAI
+User Browser
+     │
+     ▼
+Frontend (SvelteKit :5173)
+     │
+     ▼
+Express Backend (:5000) ──────────► Groq Cloud (AI Financial Chat)
+     ├────────► MongoDB (Mongoose ODM)
+     └────────► FastAPI ML Service (:8000)
+                     ├────────► OCR.space API (Raw text extraction)
+                     └────────► Groq Cloud (LLM receipt structuring)
+
 ```
 
 ### Data Flow
@@ -127,15 +126,17 @@ Express Backend
 ```
 User Browser (SvelteKit)
        │
-       ├──► REST API (Express :5000)
-       │         │
-       │         ├──► MongoDB (Mongoose ODM)
-       │         └──► Groq Cloud (AI Chat)
-       │
-       └──► ML Microservice (FastAPI :8000)
+       └──► REST API (Express :5000)
                  │
-                 ├──► OCR.space API  (receipt text extraction)
-                 └──► Groq Cloud     (LLM structuring & analysis)
+                 ├──► MongoDB (Users, Transactions, Analytics)
+                 │
+                 ├──► Groq Cloud (Direct AI Chat Assistant)
+                 │
+                 └──► ML Microservice (FastAPI :8000) [OCR Proxy]
+                           │
+                           ├──► OCR.space API  (Receipt image text extraction)
+                           └──► Groq Cloud     (JSON structuring & validation)
+
 ```
 
 ---
