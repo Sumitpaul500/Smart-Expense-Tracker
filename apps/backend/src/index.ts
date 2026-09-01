@@ -8,6 +8,7 @@ import authRoutes from './routes/authRoutes';
 import transactionRoutes from './routes/transactionRoutes';
 import aiRoutes from './routes/aiRoutes';
 import ocrRoutes from './routes/ocrRoutes';
+import reconciliationRoutes from './routes/reconciliationRoutes';
 
 dotenv.config();
 
@@ -33,6 +34,7 @@ app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/transactions', transactionRoutes);
 app.use('/api/v1/ai', aiRoutes);
 app.use('/api/v1/ocr', ocrRoutes);
+app.use('/api/v1/reconciliation', reconciliationRoutes);
 
 app.get('/api/v1/health', (req, res) => {
     res.json({ status: 'ok', service: 'finpilot-api' });

@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.router import router as ai_router
 from app.api.ml_router import router as ml_router
 from app.api.ocr_router import router as ocr_router
+from app.api.reconcile_router import router as reconcile_router
 
 app = FastAPI(title="FinPilot AI - ML Microservice")
 
@@ -17,6 +18,7 @@ app.add_middleware(
 app.include_router(ai_router, prefix="/api/v1/ai", tags=["AI"])
 app.include_router(ml_router, prefix="/api/v1/ml", tags=["ML"])
 app.include_router(ocr_router, prefix="/api/v1/ocr", tags=["OCR"])
+app.include_router(reconcile_router, prefix="/api/v1/reconcile", tags=["Reconciliation"])
 
 @app.get("/")
 def read_root():

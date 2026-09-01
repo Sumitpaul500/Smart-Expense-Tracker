@@ -14,11 +14,13 @@
 		Sun,
 		Moon,
 		Monitor,
-		ScanLine
+		ScanLine,
+		ShieldCheck
 	} from 'lucide-svelte';
 
 	const navItems = [
 		{ label: 'Dashboard', href: '/', icon: LayoutDashboard },
+		{ label: 'AI Reconciliation', href: '/reconciliation', icon: ShieldCheck },
 		{ label: 'Transactions', href: '/transactions', icon: ArrowLeftRight },
 		{ label: 'Scan Receipt', href: '/receipts', icon: ScanLine },
 		{ label: 'Analytics', href: '/analytics', icon: BarChart3 },
@@ -58,11 +60,11 @@
 	<div class="flex items-center justify-between px-5 py-5 border-b border-border/40">
 		<div class="flex items-center gap-2.5">
 			<div class="w-8 h-8 bg-primary rounded-lg flex items-center justify-center shadow-lg shadow-primary/30">
-				<TrendingUp class="w-4 h-4 text-white" />
+				<ShieldCheck class="w-4.5 h-4.5 text-white" />
 			</div>
 			<div>
-				<p class="font-bold text-sm tracking-tight text-foreground">FinPilot</p>
-				<p class="text-[10px] text-primary font-medium">AI Finance</p>
+				<p class="font-bold text-sm tracking-tight text-foreground">FinPilot AI</p>
+				<p class="text-[10px] text-primary font-medium">Finance Controller</p>
 			</div>
 		</div>
 		<!-- Mobile close button -->
@@ -92,10 +94,7 @@
 						: 'text-muted-foreground hover:text-foreground hover:bg-secondary/80'}
 				"
 			>
-				<svelte:component
-					this={item.icon}
-					class="w-4 h-4 shrink-0 {active ? 'text-white' : 'text-muted-foreground group-hover:text-foreground'}"
-				/>
+				<item.icon class="w-4 h-4 shrink-0 {active ? 'text-white' : 'text-muted-foreground group-hover:text-foreground'}" />
 				{item.label}
 				{#if active}
 					<span class="ml-auto w-1.5 h-1.5 rounded-full bg-white/70"></span>

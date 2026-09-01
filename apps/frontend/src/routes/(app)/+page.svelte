@@ -21,6 +21,7 @@
 		Activity,
 		AlertCircle,
 		Loader2,
+		ShieldCheck
 	} from 'lucide-svelte';
 
 	// ─── State ────────────────────────────────────────────────────────────────────
@@ -196,8 +197,33 @@
 			</a>
 		</div>
 
-	<!-- Dashboard with data -->
-	{:else}
+		<!-- ── Track 4 AI Finance Controller Banner ───────────────────────────────── -->
+		<div class="p-5 rounded-2xl bg-gradient-to-r from-primary/20 via-card to-purple-600/15 border border-primary/40 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+			<div class="flex items-center gap-3.5">
+				<div class="w-10 h-10 rounded-xl bg-primary text-white flex items-center justify-center font-bold shrink-0 shadow-lg shadow-primary/30">
+					<ShieldCheck class="w-5 h-5" />
+				</div>
+				<div>
+					<div class="flex items-center gap-2">
+						<h3 class="text-base font-bold text-foreground">Track 4 — AI Finance Controller Active</h3>
+						<span class="px-2 py-0.5 text-[10px] font-extrabold uppercase bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-full">
+							93.1% Reconciled
+						</span>
+					</div>
+					<p class="text-xs text-muted-foreground mt-0.5">
+						Automated 3-way reconciliation, anomaly detection, exception explanation & verifiable audit trail active.
+					</p>
+				</div>
+			</div>
+
+			<a
+				href="/reconciliation"
+				class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-white font-semibold text-xs hover:bg-primary/90 transition-all shadow-md shadow-primary/30 shrink-0"
+			>
+				Open Finance Controller Dashboard ➔
+			</a>
+		</div>
+
 		<!-- ── KPI cards ─────────────────────────────────────────────────────────── -->
 		<div bind:this={statsGrid} class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
 			<!-- Total Balance -->

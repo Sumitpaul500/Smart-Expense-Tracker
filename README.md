@@ -1,24 +1,24 @@
-# 💰 Smart Expense Tracker — FinPilot AI
+# 🛡️ FinPilot AI — Track 4: AI Finance Controller
 
 <div align="center">
 
 <br />
 
-# 🚀 **FinPilot AI — Smart Expense Tracker**
-### *Full-Stack Personal Finance Platform with Receipt OCR, Bank SMS Parser & LLM Financial Assistant*
+# 🚀 **FinPilot AI — Track 4: AI Finance Controller**
+### *Intelligent AI Finance Controller with 3-Way Reconciliation, Exception Explanation & Audit Trail*
 
 <br />
 
+[![Track 4](https://img.shields.io/badge/Track_4-AI_Finance_Controller-8B5CF6?style=for-the-badge&logo=shield&logoColor=white)](#)
 [![SvelteKit](https://img.shields.io/badge/SvelteKit-5.0-FF3E00?style=for-the-badge&logo=svelte&logoColor=white)](https://kit.svelte.dev)
 [![Node.js](https://img.shields.io/badge/Node.js-Express-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org)
 [![MongoDB](https://img.shields.io/badge/MongoDB-6.0-47A248?style=for-the-badge&logo=mongodb&logoColor=white)](https://mongodb.com)
 [![FastAPI](https://img.shields.io/badge/FastAPI-Python-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://typescriptlang.org)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](LICENSE)
 
 <br />
 
-**A full-stack, AI-powered personal finance management platform** — track income, expenses & transfers; scan receipts with OCR; import bank SMS alerts automatically; get real-time financial advice from an LLM-backed assistant; and visualise your money through stunning 3D-style interactive charts.
+> **"FinPilot AI is an intelligent Finance Controller that automatically ingests financial data, reconciles transactions across multiple sources, detects anomalies and mismatches, explains exceptions, and maintains an auditable trail of financial decisions."**
 
 </div>
 
@@ -43,6 +43,18 @@
 ---
 
 ## ✨ Key Features
+
+### 🛡️ AI Reconciliation Engine *(Track 4 Centerpiece)*
+- **3-Way Data Cross-Matching**: Automatically reconciles data across three distinct channels:
+  ```text
+  Bank/SMS transaction  +  Receipt/Invoice  +  Ledger record  ➔  AI RECONCILIATION  ➔  MATCHED / MISMATCH / SUSPICIOUS
+  ```
+- **Automatic Exception Explanation**:
+  - **MATCHED** ✅: Merchant, amount, and date matched across all channels; auto-approved.
+  - **MISMATCH** ⚠️: Identifies precise variance (e.g. Bank ₹5,999 vs Receipt ₹5,499 ➔ Mismatch detected, Diff ₹500, Confidence 96%) with actionable recommendations.
+  - **SUSPICIOUS** 🚨: Flags unverified merchants, missing supporting invoices, or high-risk debits for security compliance audit.
+- **AI Finance Controller Dashboard**: Real-time KPI cards for Total Monitored Transactions, Reconciled Count, Mismatches, Suspicious Items, Unresolved Count, and Reconciliation Rate (%).
+- **Auditable Decision Trail**: Clickable audit record for every financial decision detailing Transaction ID, Source, Receipt Reference, AI Decision, Confidence score, and Controller status.
 
 ### 🧾 Receipt OCR Scanner
 - Upload any receipt image (JPEG / PNG / WebP)

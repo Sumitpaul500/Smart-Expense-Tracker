@@ -120,6 +120,30 @@ export const ocrApi = {
 	},
 };
 
+// ─── Reconciliation ───────────────────────────────────────────────────────────
+export const reconciliationApi = {
+	getStats: () =>
+		fetch(`${BASE}/reconciliation/stats`, { headers: getHeaders() }).then((r) =>
+			handleResponse<ReconciliationStats>(r)
+		),
+
+	getItems: () =>
+		fetch(`${BASE}/reconciliation/items`, { headers: getHeaders() }).then((r) =>
+			handleResponse<{ items: ReconciliationItem[]; count: number }>(r)
+		),
+
+	runReconciliation: () =>
+		fetch(`${BASE}/reconciliation/run`, {
+			method: 'POST',
+			headers: getHeaders(),
+		}).then((r) => handleResponse<{ summary: ReconciliationStats; results: any[] }>(r)),
+
+	getAuditTrail: (txCode: string) =>
+		fetch(`${BASE}/reconciliation/audit/${txCode}`, { headers: getHeaders() }).then((r) =>
+			handleResponse<AuditTrailRecord>(r)
+		),
+};
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 export interface AuthResponse {
 	_id: string;
@@ -230,4 +254,46 @@ export interface OcrResult {
 	line_items: OcrLineItem[];
 	payment_method?: string | null;
 	raw_text: string | null;
+}
+
+export interface ReconciliationStats {
+	totalTransactions: number;
+	reconciled: number;
+	mismatches: number;
+	suspicious: number;
+	unresolved: number;
+	reconciliationRate: number;
+}
+
+export interface ReconciliationItem {
+	_id?: string;
+	txCode: string;
+	merchant: string;
+	bankAmount: number;
+	receiptAmount?: number;
+	ledgerAmount?: number;
+	currency?: string;
+	source?: string;
+	receiptRef?: string;
+	status: 'MATCHED' | 'MISMATCH' | 'SUSPICIOUS';
+	confidence: number;
+	difference: number;
+	reason: string;
+	action: string;
+	auditTrailStatus?: string;
+	date?: string;
+}
+
+export interface AuditTrailRecord {
+	txCode: string;
+	source: string;
+	receiptRef: string;
+	aiDecision: 'MATCHED' | 'MISMATCH' | 'SUSPICIOUS';
+	confidence: string;
+	reason: string;
+	decisionStatus: string;
+	merchant: string;
+	bankAmount: number;
+	receiptAmount?: number;
+	difference: number;
 }
