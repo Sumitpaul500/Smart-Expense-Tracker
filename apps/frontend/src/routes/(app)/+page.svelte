@@ -33,7 +33,7 @@
 
 	// ─── Derived ──────────────────────────────────────────────────────────────────
 	const firstName = $derived(authState.user?.firstName ?? 'there');
-	const hasData   = $derived(analytics !== null && analytics.transactionCount > 0);
+	const hasData   = $derived(analytics !== null && (analytics.transactionCount > 0 || (analytics.recentTransactions && analytics.recentTransactions.length > 0)));
 	const contextSummary = $derived(
 		analytics
 			? `Total Income: ${fmt(analytics.totalIncome)}, Total Expenses: ${fmt(analytics.totalExpenses)}, Net Savings: ${fmt(analytics.totalSavings)}, Health Score: ${analytics.healthScore}/100, Top Category: ${analytics.categoryBreakdown[0]?.name ?? 'None'} (${fmt(analytics.categoryBreakdown[0]?.total ?? 0)}).`

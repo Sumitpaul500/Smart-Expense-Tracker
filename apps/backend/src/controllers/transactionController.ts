@@ -63,26 +63,29 @@ export const createTransaction = async (req: AuthRequest, res: Response) => {
             totalAmount
         } = req.body;
 
+        const numAmount = Number(amount || totalAmount || 0);
+
         const transaction = await Transaction.create({
             userId: req.user?._id,
-            type,
-            amount: amount || totalAmount,
-            currency,
-            date,
-            categoryId,
-            merchant,
+            type: type || 'expense',
+            amount: numAmount,
+            currency: currency || 'INR',
+            date: date ? new Date(date) : new Date(),
+            categoryId: categoryId || undefined,
+            merchant: merchant || 'Unknown Merchant',
             location,
-            tags,
-            isRecurring,
-            baseAmount,
-            taxAmount,
-            taxBreakdown,
-            additionalCharges,
-            totalAmount: totalAmount || amount
+            tags: tags || ['ocr-extracted'],
+            isRecurring: Boolean(isRecurring),
+            baseAmount: Number(baseAmount || 0),
+            taxAmount: Number(taxAmount || 0),
+            taxBreakdown: taxBreakdown || undefined,
+            additionalCharges: additionalCharges || undefined,
+            totalAmount: Number(totalAmount || numAmount)
         });
 
         res.status(201).json(transaction);
     } catch (error: any) {
+        console.error('createTransaction error:', error);
         res.status(400).json({ message: error.message });
     }
 };
@@ -96,21 +99,30 @@ export const bulkCreateTransactions = async (req: AuthRequest, res: Response) =>
         }
 
         const userId = req.user?._id;
-        const docs = items.map((item: any) => ({
-            userId,
-            type: item.type || 'expense',
-            amount: Number(item.amount),
-            currency: item.currency || 'INR',
-            date: item.date ? new Date(item.date) : new Date(),
-            categoryId: item.categoryId || undefined,
-            merchant: item.merchant || 'Bulk Transaction',
-            tags: item.tags || ['bulk-import'],
-            isRecurring: Boolean(item.isRecurring),
-        }));
+        const docs = items.map((item: any) => {
+            const numAmount = Number(item.amount || item.totalAmount || 0);
+            return {
+                userId,
+                type: item.type || 'expense',
+                amount: numAmount,
+                currency: item.currency || 'INR',
+                date: item.date ? new Date(item.date) : new Date(),
+                categoryId: item.categoryId || undefined,
+                merchant: item.merchant || 'Bulk Transaction',
+                tags: item.tags || ['bulk-import'],
+                isRecurring: Boolean(item.isRecurring),
+                baseAmount: Number(item.baseAmount || 0),
+                taxAmount: Number(item.taxAmount || 0),
+                taxBreakdown: item.taxBreakdown || undefined,
+                additionalCharges: item.additionalCharges || undefined,
+                totalAmount: Number(item.totalAmount || numAmount),
+            };
+        });
 
         const created = await Transaction.insertMany(docs);
         res.status(201).json({ count: created.length, transactions: created });
     } catch (error: any) {
+        console.error('bulkCreateTransactions error:', error);
         res.status(400).json({ message: error.message });
     }
 };
@@ -374,13 +386,16 @@ export const getAnalytics = async (req: AuthRequest, res: Response) => {
         const weeklyTrendFormatted = Object.values(weekMap);
 
         // ── 8. Recent transactions ────────────────────────────────────────────
-        const recentTransactions = await Transaction.find(baseMatch)
-            .sort({ date: -1 })
-            .limit(5)
+        let recentTransactions = await Transaction.find({ userId })
+            .sort({ createdAt: -1, date: -1 })
+            .limit(10)
             .populate('categoryId', 'name icon color')
             .lean();
 
-        // ── 9. Financial health score (0-100) ────────────────────────────────
+        // ── 9. Total transaction count ────────────────────────────────────────
+        const totalTxCount = await Transaction.countDocuments({ userId });
+
+        // ── 10. Financial health score (0-100) ────────────────────────────────
         let healthScore = 0;
         if (totalBalance > 0) healthScore += 30;
         if (totalIncome > 0 && totalExpenses / totalIncome < 0.7) healthScore += 25;
@@ -412,7 +427,7 @@ export const getAnalytics = async (req: AuthRequest, res: Response) => {
             weeklyTrend:  weeklyTrendFormatted,
             recentTransactions,
             healthScore,
-            transactionCount: (countsMap['income'] ?? 0) + (countsMap['expense'] ?? 0),
+            transactionCount: totalTxCount,
         });
     } catch (error: any) {
         console.error('Analytics error:', error);

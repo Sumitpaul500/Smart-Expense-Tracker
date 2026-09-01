@@ -33,7 +33,7 @@ const transactionSchema = new Schema<ITransaction>(
         userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
         type: { type: String, enum: ['income', 'expense', 'transfer'], required: true },
         amount: { type: Number, required: true },
-        currency: { type: String, default: 'USD' },
+        currency: { type: String, default: 'INR' },
         date: { type: Date, required: true, default: Date.now, index: true },
         categoryId: { type: Schema.Types.ObjectId, ref: 'Category' },
         merchant: { type: String, required: true },
