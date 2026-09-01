@@ -23,7 +23,7 @@ class FinancialAssistant:
             client = Groq(api_key=groq_key)
 
             response = client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
+                model="groq/compound",
                 messages=[
                     {"role": "system", "content": self.system_prompt},
                     {"role": "user", "content": f"Context: {context}\n\nUser: {query}"},
@@ -40,7 +40,7 @@ class FinancialAssistant:
                 from groq import Groq
                 client = Groq(api_key=groq_key)
                 response = client.chat.completions.create(
-                    model="llama-3.1-8b-instant",
+                    model="groq/compound-mini",
                     messages=[
                         {"role": "system", "content": self.system_prompt},
                         {"role": "user", "content": f"Context: {context}\n\nUser: {query}"},

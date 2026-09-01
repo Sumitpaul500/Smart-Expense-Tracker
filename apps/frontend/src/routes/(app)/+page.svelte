@@ -197,6 +197,9 @@
 			</a>
 		</div>
 
+	<!-- ── Data loaded: full dashboard ──────────────────────────────────────── -->
+	{:else}
+
 		<!-- ── Track 4 AI Finance Controller Banner ───────────────────────────────── -->
 		<div class="p-5 rounded-2xl bg-gradient-to-r from-primary/20 via-card to-purple-600/15 border border-primary/40 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
 			<div class="flex items-center gap-3.5">
@@ -205,9 +208,9 @@
 				</div>
 				<div>
 					<div class="flex items-center gap-2">
-						<h3 class="text-base font-bold text-foreground">Track 4 — AI Finance Controller Active</h3>
+						<h3 class="text-base font-bold text-foreground">AI Finance Controller Active</h3>
 						<span class="px-2 py-0.5 text-[10px] font-extrabold uppercase bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-full">
-							93.1% Reconciled
+							Real-Time Audit
 						</span>
 					</div>
 					<p class="text-xs text-muted-foreground mt-0.5">

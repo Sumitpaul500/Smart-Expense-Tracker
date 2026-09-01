@@ -142,6 +142,13 @@ export const reconciliationApi = {
 		fetch(`${BASE}/reconciliation/audit/${txCode}`, { headers: getHeaders() }).then((r) =>
 			handleResponse<AuditTrailRecord>(r)
 		),
+
+	updateStatus: (txCode: string, status: string = 'MATCHED') =>
+		fetch(`${BASE}/reconciliation/${txCode}/status`, {
+			method: 'PATCH',
+			headers: getHeaders(),
+			body: JSON.stringify({ status })
+		}).then((r) => handleResponse<{ message: string; item: ReconciliationItem }>(r)),
 };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -263,6 +270,9 @@ export interface ReconciliationStats {
 	suspicious: number;
 	unresolved: number;
 	reconciliationRate: number;
+	bankSmsCount?: number;
+	receiptCount?: number;
+	ledgerCount?: number;
 }
 
 export interface ReconciliationItem {
@@ -275,7 +285,7 @@ export interface ReconciliationItem {
 	currency?: string;
 	source?: string;
 	receiptRef?: string;
-	status: 'MATCHED' | 'MISMATCH' | 'SUSPICIOUS';
+	status: 'MATCHED' | 'MISMATCH' | 'SUSPICIOUS' | 'RESOLVED';
 	confidence: number;
 	difference: number;
 	reason: string;
@@ -288,7 +298,7 @@ export interface AuditTrailRecord {
 	txCode: string;
 	source: string;
 	receiptRef: string;
-	aiDecision: 'MATCHED' | 'MISMATCH' | 'SUSPICIOUS';
+	aiDecision: 'MATCHED' | 'MISMATCH' | 'SUSPICIOUS' | 'RESOLVED';
 	confidence: string;
 	reason: string;
 	decisionStatus: string;

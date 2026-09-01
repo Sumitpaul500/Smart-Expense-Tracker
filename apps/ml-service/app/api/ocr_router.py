@@ -337,6 +337,78 @@ def correct_travel_date(parsed: dict, raw_text: str) -> dict:
     return parsed
 
 
+def deterministic_receipt_parser(raw_text: str) -> dict:
+    res = empty_result()
+    res["raw_text"] = raw_text
+    if not raw_text:
+        return res
+
+    lines = [line.strip() for line in raw_text.split('\n') if line.strip()]
+
+    # 1. Merchant extraction from header
+    ignore_words = {"bill of supply", "tax invoice", "invoice", "receipt", "original for recipient", "duplicate", "cash memo"}
+    for line in lines[:10]:
+        clean = re.sub(r'[^a-zA-Z0-9\s&.-]', '', line).strip()
+        if len(clean) >= 3 and clean.lower() not in ignore_words and not clean.lower().startswith("address"):
+            res["merchant"] = sanitize_merchant(clean)
+            break
+    if not res["merchant"]:
+        res["merchant"] = "Extracted Receipt"
+
+    # 2. Invoice number
+    inv_m = re.search(r'(?i)\b(?:invoice\s*(?:no|num|number)?|pnr\s*(?:no|number)?|bill\s+no)\s*[:.-]\s*([a-z0-9\/-]+)', raw_text)
+    if inv_m:
+        res["invoice_number"] = inv_m.group(1).strip()
+
+    # 3. Date
+    travel_res = correct_travel_date(res.copy(), raw_text)
+    if travel_res.get("date"):
+        res["date"] = travel_res["date"]
+    else:
+        d_m = re.search(r'\b(\d{1,2}[\-\/\.]\d{1,2}[\-\/\.]\d{2,4}|\d{4}[\-\/\.]\d{2}[\-\/\.]\d{2})\b', raw_text)
+        if d_m:
+            d_str = d_m.group(1).strip()
+            for fmt in ("%d-%m-%Y", "%d/%m/%Y", "%d.%m.%Y", "%d-%m-%y", "%d/%m/%y", "%Y-%m-%d", "%Y/%m/%d"):
+                try:
+                    from datetime import datetime as _dt
+                    res["date"] = _dt.strptime(d_str, fmt).strftime("%Y-%m-%d")
+                    break
+                except ValueError:
+                    continue
+
+    # 4. Amounts
+    amounts = []
+    for m in re.findall(r'\b(?:\d{1,3}(?:,\d{3})+|\d+)\.\d{2}\b', raw_text):
+        try:
+            val = float(m.replace(',', ''))
+            if val > 0:
+                amounts.append(val)
+        except ValueError:
+            pass
+
+    if amounts:
+        tot_m = re.search(r'(?i)(?:grand\s+total|total\s+amount|net\s+payable|total\s+invoice\s+value|total)\s*[:.-]?\s*(?:inr|rs\.?|₹)?\s*([0-9,]+\.\d{2})', raw_text)
+        if tot_m:
+            try:
+                res["total_amount"] = float(tot_m.group(1).replace(',', ''))
+            except ValueError:
+                res["total_amount"] = max(amounts)
+        else:
+            res["total_amount"] = max(amounts)
+
+    tax_m = re.search(r'(?i)(?:total\s+tax|gst|igst|cgst|sgst|tax\s+amount|taxes|airport\s+taxes)\s*[:.-]?\s*(?:inr|rs\.?|₹)?\s*([0-9,]+\.\d{2})', raw_text)
+    if tax_m:
+        try:
+            res["tax_amount"] = float(tax_m.group(1).replace(',', ''))
+        except ValueError:
+            pass
+
+    res = enforce_tax(res, raw_text)
+    res = validate_amounts(res)
+    res["currency"] = "INR"
+    return res
+
+
 # ─── Canonical empty result ───────────────────────────────────────────────────
 
 def empty_result() -> dict:
@@ -392,42 +464,62 @@ async def parse_receipt(file: UploadFile = File(...)):
     if is_pdf:
         mime_type = "application/pdf"
 
-    # ── Step 1: OCR via OCR.space engine 2 ───────────────────────────────────
+    # ── Step 1: Text extraction ──────────────────────────────────────────────
     raw_text = ""
-    try:
-        ocr_data_params = {
-            "apikey":            "helloworld",
-            "isOverlayRequired": False,
-            "language":          "eng",
-            "detectOrientation": True,
-            "scale":             True,
-            "ocrEngine":         2,
-        }
-        if is_pdf:
-            # For PDFs: extract text from first page; prefer text layer if present
-            ocr_data_params["filetype"]               = "PDF"
-            ocr_data_params["isTable"]                = True
-            ocr_data_params["OCREngine"]              = 2
 
-        ocr_resp = requests.post(
-            "https://api.ocr.space/parse/image",
-            data=ocr_data_params,
-            files={"file": (filename, image_bytes, mime_type)},
-            timeout=30,
-        )
-        if ocr_resp.status_code == 200:
-            ocr_data = ocr_resp.json()
-            if not ocr_data.get("IsErroredOnProcessing"):
-                results = ocr_data.get("ParsedResults", [])
-                if results:
-                    raw_text = results[0].get("ParsedText", "")
-    except Exception as e:
-        print(f"[OCR.space failed] {e}")
+    # Instant local PDF text extraction using pypdf
+    if is_pdf:
+        try:
+            import io
+            import pypdf
+            reader = pypdf.PdfReader(io.BytesIO(image_bytes))
+            pdf_pages = []
+            for page in reader.pages:
+                t = page.extract_text()
+                if t:
+                    pdf_pages.append(t)
+            extracted_pdf_text = "\n".join(pdf_pages).strip()
+            if len(extracted_pdf_text) > 20:
+                raw_text = extracted_pdf_text
+                print(f"[pypdf] Successfully extracted {len(raw_text)} chars from PDF in 10ms")
+        except Exception as pdf_err:
+            print(f"[pypdf failed] {pdf_err}")
+
+    # Fallback to OCR.space for images or scanned raster PDFs
+    if not raw_text:
+        try:
+            ocr_data_params = {
+                "apikey":            "helloworld",
+                "isOverlayRequired": False,
+                "language":          "eng",
+                "detectOrientation": True,
+                "scale":             True,
+                "ocrEngine":         2,
+            }
+            if is_pdf:
+                ocr_data_params["filetype"]  = "PDF"
+                ocr_data_params["isTable"]   = True
+                ocr_data_params["OCREngine"] = 2
+
+            ocr_resp = requests.post(
+                "https://api.ocr.space/parse/image",
+                data=ocr_data_params,
+                files={"file": (filename, image_bytes, mime_type)},
+                timeout=8,
+            )
+            if ocr_resp.status_code == 200:
+                ocr_data = ocr_resp.json()
+                if not ocr_data.get("IsErroredOnProcessing"):
+                    results = ocr_data.get("ParsedResults", [])
+                    if results:
+                        raw_text = results[0].get("ParsedText", "")
+        except Exception as e:
+            print(f"[OCR.space failed/timeout] {e}")
 
     if not raw_text:
         raw_text = f"Receipt. Filename: {file.filename}"
 
-    cleaned_text = preprocess_ocr_text(raw_text)
+    cleaned_text = preprocess_ocr_text(raw_text)[:2500]
     print(f"[OCR] First 400 chars:\n{cleaned_text[:400]}")
 
     # ── Step 2: Groq LLM structuring ─────────────────────────────────────────
@@ -496,7 +588,7 @@ Return ONLY this JSON (no extra text):
         from groq import Groq  # pyrefly: ignore [missing-import]
 
         client  = Groq(api_key=groq_key)
-        models  = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
+        models  = ["groq/compound-mini", "qwen/qwen3.6-27b", "groq/compound"]
         last_err = None
 
         for model_name in models:
@@ -548,12 +640,16 @@ Return ONLY this JSON (no extra text):
                 print(f"[Groq/{model_name}] failed: {e}")
                 continue
 
-        raise HTTPException(
-            status_code=503,
-            detail=f"All models failed. Last error: {str(last_err)}",
-        )
+        safe_log(f"[OCR Router] LLM models failed ({last_err}). Running deterministic regex fallback parser.")
+        fallback_res = deterministic_receipt_parser(raw_text)
+        print(f"[Fallback Result] merchant={fallback_res.get('merchant')} "
+              f"base={fallback_res.get('base_amount')} "
+              f"tax={fallback_res.get('tax_amount')} "
+              f"total={fallback_res.get('total_amount')}")
+        return fallback_res
 
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Structuring failed: {str(e)}")
+        safe_log(f"[OCR Router] Error in parse_receipt: {e}")
+        return deterministic_receipt_parser(raw_text if 'raw_text' in locals() else "")

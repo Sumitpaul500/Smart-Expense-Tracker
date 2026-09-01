@@ -6,126 +6,55 @@ import axios from 'axios';
 
 const ML_SERVICE_URL = process.env.ML_SERVICE_URL || 'http://localhost:8000';
 
-const DEFAULT_DEMO_ITEMS = [
-    {
-        txCode: 'TX10290',
-        merchant: 'Amazon',
-        bankAmount: 1299,
-        receiptAmount: 1299,
-        ledgerAmount: 1299,
-        currency: 'INR',
-        source: 'Bank SMS',
-        receiptRef: 'RCP9180',
-        status: 'MATCHED',
-        confidence: 98.7,
-        difference: 0,
-        reason: 'Merchant, amount and date matched across all three sources.',
-        action: 'Automatically approved',
-        auditTrailStatus: 'Automatically approved',
-        date: new Date(Date.now() - 3600000 * 2)
-    },
-    {
-        txCode: 'TX10291',
-        merchant: 'Flipkart',
-        bankAmount: 5999,
-        receiptAmount: 5499,
-        ledgerAmount: 5999,
-        currency: 'INR',
-        source: 'Bank SMS',
-        receiptRef: 'RCP9182',
-        status: 'MISMATCH',
-        confidence: 96.0,
-        difference: 500,
-        reason: "Bank amount doesn't match receipt amount. Difference of ₹500 detected.",
-        action: 'Review transaction',
-        auditTrailStatus: 'Requires Review',
-        date: new Date(Date.now() - 3600000 * 6)
-    },
-    {
-        txCode: 'TX10292',
-        merchant: 'Unknown / Direct Debit',
-        bankAmount: 18500,
-        receiptAmount: undefined,
-        ledgerAmount: 18500,
-        currency: 'INR',
-        source: 'Bank Feed',
-        receiptRef: undefined,
-        status: 'SUSPICIOUS',
-        confidence: 94.5,
-        difference: 18500,
-        reason: 'Unrecognized merchant identity and missing mandatory supporting receipt.',
-        action: 'Flagged for security audit',
-        auditTrailStatus: 'Flagged for Audit',
-        date: new Date(Date.now() - 3600000 * 12)
-    },
-    {
-        txCode: 'TX10293',
-        merchant: 'Swiggy',
-        bankAmount: 450,
-        receiptAmount: 450,
-        ledgerAmount: 450,
-        currency: 'INR',
-        source: 'Bank SMS',
-        receiptRef: 'RCP9185',
-        status: 'MATCHED',
-        confidence: 99.1,
-        difference: 0,
-        reason: 'Exact match between UPI Bank notification and digital food order receipt.',
-        action: 'Automatically approved',
-        auditTrailStatus: 'Automatically approved',
-        date: new Date(Date.now() - 3600000 * 20)
-    },
-    {
-        txCode: 'TX10294',
-        merchant: 'Reliance Smart',
-        bankAmount: 2450,
-        receiptAmount: 2300,
-        ledgerAmount: 2450,
-        currency: 'INR',
-        source: 'Receipt OCR',
-        receiptRef: 'RCP9188',
-        status: 'MISMATCH',
-        confidence: 95.2,
-        difference: 150,
-        reason: 'Receipt total ₹2,300 differs from bank debit ₹2,450 (unclaimed delivery charge).',
-        action: 'Review transaction',
-        auditTrailStatus: 'Requires Review',
-        date: new Date(Date.now() - 3600000 * 36)
-    }
-];
+// Helper to count pipeline sources from real transactions
+async function getPipelineCounts(userId?: any) {
+    const filter = userId ? { userId } : {};
+    const [totalLedger, bankSmsCount, receiptCount] = await Promise.all([
+        Transaction.countDocuments(filter),
+        Transaction.countDocuments({ ...filter, tags: { $in: ['sms-import', 'bank-import', 'auto-parsed'] } }),
+        Transaction.countDocuments({
+            ...filter,
+            $or: [
+                { receiptId: { $ne: null } },
+                { totalAmount: { $exists: true, $ne: null } },
+                { tags: { $in: ['ocr-scanned', 'receipt-import'] } }
+            ]
+        })
+    ]);
+
+    return { totalLedger, bankSmsCount, receiptCount };
+}
 
 // ─── GET /api/v1/reconciliation/stats ────────────────────────────────────────
 export const getReconciliationStats = async (req: AuthRequest, res: Response) => {
     try {
         const userId = req.user?._id;
-        const totalLogs = await ReconciliationLog.countDocuments(userId ? { userId } : {});
+        const filter = userId ? { userId } : {};
+        
+        const pipelineCounts = await getPipelineCounts(userId);
+        const logs = await ReconciliationLog.find(filter);
 
-        if (totalLogs === 0) {
-            // Seed defaults for instant WOW demo experience
-            const matched = 1164;
-            const mismatches = 52;
-            const suspicious = 24;
-            const unresolved = 10;
-            const total = 1250;
-            const rate = 93.1;
-
+        if (logs.length === 0) {
+            // Un-reconciled initial state: derived directly from user's actual MongoDB transactions
             return res.json({
-                totalTransactions: total,
-                reconciled: matched,
-                mismatches,
-                suspicious,
-                unresolved,
-                reconciliationRate: rate
+                totalTransactions: pipelineCounts.totalLedger,
+                reconciled: 0,
+                mismatches: 0,
+                suspicious: 0,
+                unresolved: pipelineCounts.totalLedger,
+                reconciliationRate: 0.0,
+                bankSmsCount: pipelineCounts.bankSmsCount,
+                receiptCount: pipelineCounts.receiptCount,
+                ledgerCount: pipelineCounts.totalLedger
             });
         }
 
-        const logs = await ReconciliationLog.find(userId ? { userId } : {});
         const total = logs.length;
-        const matched = logs.filter(l => l.status === 'MATCHED').length;
+        const matched = logs.filter(l => l.status === 'MATCHED' || l.status === 'RESOLVED').length;
         const mismatches = logs.filter(l => l.status === 'MISMATCH').length;
         const suspicious = logs.filter(l => l.status === 'SUSPICIOUS').length;
         const unresolved = mismatches + suspicious;
-        const rate = total > 0 ? Number(((matched / total) * 100).toFixed(1)) : 100.0;
+        const rate = total > 0 ? Number(((matched / total) * 100).toFixed(1)) : 0.0;
 
         return res.json({
             totalTransactions: total,
@@ -133,9 +62,13 @@ export const getReconciliationStats = async (req: AuthRequest, res: Response) =>
             mismatches,
             suspicious,
             unresolved,
-            reconciliationRate: rate
+            reconciliationRate: rate,
+            bankSmsCount: pipelineCounts.bankSmsCount,
+            receiptCount: pipelineCounts.receiptCount,
+            ledgerCount: pipelineCounts.totalLedger
         });
     } catch (error: any) {
+        console.error('[Reconciliation Controller Stats Error]:', error);
         return res.status(500).json({ message: error.message });
     }
 };
@@ -144,14 +77,12 @@ export const getReconciliationStats = async (req: AuthRequest, res: Response) =>
 export const getReconciliationItems = async (req: AuthRequest, res: Response) => {
     try {
         const userId = req.user?._id;
-        const logs = await ReconciliationLog.find(userId ? { userId } : {}).sort({ date: -1 });
-
-        if (logs.length === 0) {
-            return res.json({ items: DEFAULT_DEMO_ITEMS, count: DEFAULT_DEMO_ITEMS.length });
-        }
+        const filter = userId ? { userId } : {};
+        const logs = await ReconciliationLog.find(filter).sort({ date: -1 });
 
         return res.json({ items: logs, count: logs.length });
     } catch (error: any) {
+        console.error('[Reconciliation Controller Items Error]:', error);
         return res.status(500).json({ message: error.message });
     }
 };
@@ -160,37 +91,50 @@ export const getReconciliationItems = async (req: AuthRequest, res: Response) =>
 export const runReconciliation = async (req: AuthRequest, res: Response) => {
     try {
         const userId = req.user?._id;
-        
-        // Fetch user's latest transactions from DB to reconcile
-        const transactions = await Transaction.find(userId ? { userId } : {}).limit(20).lean();
+        const filter = userId ? { userId } : {};
 
-        let itemsToProcess = [];
-        if (transactions.length > 0) {
-            itemsToProcess = transactions.map((t: any) => ({
-                id: `TX-${t._id.toString().slice(-5).toUpperCase()}`,
-                merchant: t.merchant,
-                bank_amount: t.amount,
-                receipt_amount: t.totalAmount || t.amount,
-                ledger_amount: t.amount,
-                currency: t.currency || 'INR',
-                source: t.tags?.includes('sms-import') ? 'Bank SMS' : 'Ledger Record',
-                receipt_ref: t.receiptId ? `RCP-${t.receiptId.toString().slice(-4)}` : undefined
-            }));
-        } else {
-            // Use defaults
-            itemsToProcess = DEFAULT_DEMO_ITEMS.map(i => ({
-                id: i.txCode,
-                merchant: i.merchant,
-                bank_amount: i.bankAmount,
-                receipt_amount: i.receiptAmount,
-                ledger_amount: i.ledgerAmount,
-                currency: i.currency,
-                source: i.source,
-                receipt_ref: i.receiptRef
-            }));
+        // Fetch user's real transactions from MongoDB
+        const transactions = await Transaction.find(filter).sort({ date: -1 }).lean();
+
+        if (transactions.length === 0) {
+            const pipelineCounts = await getPipelineCounts(userId);
+            return res.json({
+                summary: {
+                    total_transactions: 0,
+                    reconciled: 0,
+                    mismatches: 0,
+                    suspicious: 0,
+                    unresolved: 0,
+                    reconciliation_rate: 0.0,
+                    bank_sms_count: 0,
+                    receipt_count: 0,
+                    ledger_count: 0
+                },
+                results: []
+            });
         }
 
-        // Send to FastAPI ML Microservice
+        const itemsToProcess = transactions.map((t: any) => {
+            const isSms = t.tags?.includes('sms-import') || t.tags?.includes('auto-parsed');
+            const hasReceipt = Boolean(t.receiptId || t.totalAmount || t.tags?.includes('ocr-scanned'));
+            const txCode = `TX-${t._id.toString().slice(-6).toUpperCase()}`;
+
+            return {
+                id: txCode,
+                transaction_db_id: t._id,
+                merchant: t.merchant || 'Unknown Merchant',
+                bank_amount: t.amount,
+                receipt_amount: hasReceipt ? (t.totalAmount || t.amount) : undefined,
+                ledger_amount: t.amount,
+                currency: t.currency || 'INR',
+                source: isSms ? 'Bank SMS' : hasReceipt ? 'Receipt OCR' : 'Ledger Record',
+                receipt_ref: t.receiptId ? `RCP-${t.receiptId.toString().slice(-6).toUpperCase()}` : (hasReceipt ? 'RCP-DIGITAL' : undefined),
+                anomaly_score: t.aiInsights?.anomalyScore || 0,
+                date: t.date
+            };
+        });
+
+        // Delegate matching analysis to Python FastAPI ML service with Express fallback
         let mlResponse;
         try {
             const resp = await axios.post(`${ML_SERVICE_URL}/api/v1/reconcile/reconcile-batch`, {
@@ -198,83 +142,131 @@ export const runReconciliation = async (req: AuthRequest, res: Response) => {
             });
             mlResponse = resp.data;
         } catch (mlErr) {
-            console.warn('[Reconciliation Controller] FastAPI fallback active:', mlErr);
-            // Fallback inside Express if ML microservice is unreachable
+            console.warn('[Reconciliation Controller] FastAPI service call fallback to Express analyzer:', mlErr);
+            
             const results = itemsToProcess.map((item: any) => {
-                const diff = item.receipt_amount !== undefined ? Math.abs(item.bank_amount - item.receipt_amount) : 0;
-                const isSuspicious = item.merchant.toLowerCase().includes('unknown') || item.bank_amount > 15000;
-                const isMismatch = diff > 0.01;
-                const status = isSuspicious ? 'SUSPICIOUS' : isMismatch ? 'MISMATCH' : 'MATCHED';
-                const confidence = isSuspicious ? 94.5 : isMismatch ? 96.0 : 98.7;
+                const bankAmt = item.bank_amount;
+                const recAmt = item.receipt_amount;
+                const merchantLower = item.merchant.toLowerCase();
+                
+                const diff = recAmt !== undefined ? Math.abs(bankAmt - recAmt) : 0;
+                const isSuspicious = item.anomaly_score > 0.7 || merchantLower.includes('unknown') || merchantLower.includes('unauthorized') || (bankAmt > 20000 && recAmt === undefined);
+                const isMismatch = recAmt !== undefined && diff > 0.01;
+
+                let status: 'MATCHED' | 'MISMATCH' | 'SUSPICIOUS' = 'MATCHED';
+                let confidence = 98.5;
+                let reason = `Merchant (${item.merchant}), amount (₹${bankAmt.toFixed(2)}) and timestamp verified across records.`;
+                let action = 'Automatically approved & posted to ledger.';
+                let decisionStatus: 'Automatically approved' | 'Requires Review' | 'Flagged for Audit' = 'Automatically approved';
+
+                if (isSuspicious) {
+                    status = 'SUSPICIOUS';
+                    confidence = 92.0;
+                    reason = `High anomaly score (${(item.anomaly_score * 100).toFixed(0)}%) or unrecognized merchant identity.`;
+                    action = 'Flagged for compliance audit and security review.';
+                    decisionStatus = 'Flagged for Audit';
+                } else if (isMismatch) {
+                    status = 'MISMATCH';
+                    confidence = 95.0;
+                    reason = `Bank statement amount (₹${bankAmt.toFixed(2)}) differs from receipt OCR amount (₹${recAmt ? recAmt.toFixed(2) : '0.00'}). Variance: ₹${diff.toFixed(2)}.`;
+                    action = 'Requires controller review and supplier invoice verification.';
+                    decisionStatus = 'Requires Review';
+                }
 
                 return {
                     transaction_id: item.id,
+                    transaction_db_id: item.transaction_db_id,
                     merchant: item.merchant,
-                    bank_amount: item.bank_amount,
-                    receipt_amount: item.receipt_amount,
+                    bank_amount: bankAmt,
+                    receipt_amount: recAmt,
                     ledger_amount: item.ledger_amount,
                     status,
                     confidence,
                     difference: diff,
-                    reason: isSuspicious
-                        ? 'High value transaction with unverified merchant identity.'
-                        : isMismatch
-                        ? `Bank amount doesn't match receipt amount. Variance of ₹${diff} detected.`
-                        : 'Merchant, amount and date matched across all three channels.',
-                    action: isSuspicious ? 'Flagged for security audit' : isMismatch ? 'Review transaction' : 'Automatically approved',
+                    reason,
+                    action,
                     audit_trail: {
                         tx_code: item.id,
-                        source: item.source || 'Bank Feed',
-                        receipt_ref: item.receipt_ref || 'RCP9182',
+                        source: item.source,
+                        receipt_ref: item.receipt_ref || 'N/A',
                         ai_decision: status,
                         confidence: `${confidence}%`,
-                        reason: isMismatch ? "Bank amount doesn't match receipt amount." : "Matched across channels.",
-                        decision_status: isSuspicious ? 'Flagged for Audit' : isMismatch ? 'Requires Review' : 'Automatically approved'
+                        reason,
+                        decision_status: decisionStatus
                     }
                 };
             });
 
+            const matched = results.filter((r: any) => r.status === 'MATCHED').length;
+            const mismatches = results.filter((r: any) => r.status === 'MISMATCH').length;
+            const suspicious = results.filter((r: any) => r.status === 'SUSPICIOUS').length;
+            const total = results.length;
+
             mlResponse = {
                 summary: {
-                    total_transactions: results.length,
-                    reconciled: results.filter((r: any) => r.status === 'MATCHED').length,
-                    mismatches: results.filter((r: any) => r.status === 'MISMATCH').length,
-                    suspicious: results.filter((r: any) => r.status === 'SUSPICIOUS').length,
-                    unresolved: results.filter((r: any) => r.status !== 'MATCHED').length,
-                    reconciliation_rate: 93.1
+                    total_transactions: total,
+                    reconciled: matched,
+                    mismatches,
+                    suspicious,
+                    unresolved: mismatches + suspicious,
+                    reconciliation_rate: total > 0 ? Number(((matched / total) * 100).toFixed(1)) : 0.0
                 },
                 results
             };
         }
 
-        // Save/upsert logs into MongoDB
+        // Save real reconciliation logs into MongoDB
         for (const resItem of mlResponse.results) {
             await ReconciliationLog.findOneAndUpdate(
                 { txCode: resItem.transaction_id },
                 {
                     userId,
+                    transactionId: resItem.transaction_db_id,
                     txCode: resItem.transaction_id,
                     merchant: resItem.merchant,
                     bankAmount: resItem.bank_amount,
                     receiptAmount: resItem.receipt_amount,
-                    ledgerAmount: resItem.ledger_amount,
+                    ledgerAmount: resItem.ledger_amount || resItem.bank_amount,
                     currency: 'INR',
-                    source: resItem.audit_trail.source || 'Bank SMS',
-                    receiptRef: resItem.audit_trail.receipt_ref,
+                    source: resItem.audit_trail?.source || 'Ledger Record',
+                    receiptRef: resItem.audit_trail?.receipt_ref || 'N/A',
                     status: resItem.status,
                     confidence: resItem.confidence,
-                    difference: resItem.difference,
+                    difference: resItem.difference || 0,
                     reason: resItem.reason,
                     action: resItem.action,
-                    auditTrailStatus: resItem.audit_trail.decision_status === 'Requires Review' ? 'Requires Review' : resItem.audit_trail.decision_status === 'Flagged for Audit' ? 'Flagged for Audit' : 'Automatically approved',
+                    auditTrailStatus: resItem.audit_trail?.decision_status || 'Automatically approved',
                     date: new Date()
                 },
                 { upsert: true, new: true }
             );
         }
 
-        return res.json(mlResponse);
+        const pipelineCounts = await getPipelineCounts(userId);
+        const logs = await ReconciliationLog.find(filter).sort({ date: -1 });
+
+        const total = logs.length;
+        const matched = logs.filter(l => l.status === 'MATCHED' || l.status === 'RESOLVED').length;
+        const mismatches = logs.filter(l => l.status === 'MISMATCH').length;
+        const suspicious = logs.filter(l => l.status === 'SUSPICIOUS').length;
+        const unresolved = mismatches + suspicious;
+        const rate = total > 0 ? Number(((matched / total) * 100).toFixed(1)) : 0.0;
+
+        const summary = {
+            totalTransactions: total,
+            reconciled: matched,
+            mismatches,
+            suspicious,
+            unresolved,
+            reconciliationRate: rate,
+            bankSmsCount: pipelineCounts.bankSmsCount,
+            receiptCount: pipelineCounts.receiptCount,
+            ledgerCount: pipelineCounts.totalLedger
+        };
+
+        return res.json({ summary, results: logs });
     } catch (error: any) {
+        console.error('[Reconciliation Controller Run Error]:', error);
         return res.status(500).json({ message: error.message });
     }
 };
@@ -286,27 +278,13 @@ export const getAuditTrail = async (req: AuthRequest, res: Response) => {
         const log = await ReconciliationLog.findOne({ txCode });
 
         if (!log) {
-            // Find in default items
-            const found = DEFAULT_DEMO_ITEMS.find(i => i.txCode === txCode) || DEFAULT_DEMO_ITEMS[1];
-            return res.json({
-                txCode: found.txCode,
-                source: found.source,
-                receiptRef: found.receiptRef || 'RCP9182',
-                aiDecision: found.status,
-                confidence: `${found.confidence}%`,
-                reason: found.reason,
-                decisionStatus: found.auditTrailStatus,
-                merchant: found.merchant,
-                bankAmount: found.bankAmount,
-                receiptAmount: found.receiptAmount,
-                difference: found.difference
-            });
+            return res.status(404).json({ message: `No reconciliation audit log found for transaction ${txCode}` });
         }
 
         return res.json({
             txCode: log.txCode,
             source: log.source,
-            receiptRef: log.receiptRef || 'RCP9182',
+            receiptRef: log.receiptRef || 'N/A',
             aiDecision: log.status,
             confidence: `${log.confidence}%`,
             reason: log.reason,
@@ -317,6 +295,34 @@ export const getAuditTrail = async (req: AuthRequest, res: Response) => {
             difference: log.difference
         });
     } catch (error: any) {
+        console.error('[Reconciliation Controller Audit Error]:', error);
+        return res.status(500).json({ message: error.message });
+    }
+};
+
+// ─── PATCH /api/v1/reconciliation/:txCode/status ────────────────────────────
+export const updateReconciliationStatus = async (req: AuthRequest, res: Response) => {
+    try {
+        const { txCode } = req.params;
+        const { status } = req.body;
+        
+        const log = await ReconciliationLog.findOneAndUpdate(
+            { txCode },
+            { 
+                status: status || 'MATCHED',
+                auditTrailStatus: 'Resolved by User',
+                reason: 'Manually verified & resolved by finance controller.'
+            },
+            { new: true }
+        );
+
+        if (!log) {
+            return res.status(404).json({ message: `Reconciliation item ${txCode} not found` });
+        }
+
+        return res.json({ message: 'Status updated successfully', item: log });
+    } catch (error: any) {
+        console.error('[Reconciliation Controller Update Error]:', error);
         return res.status(500).json({ message: error.message });
     }
 };
