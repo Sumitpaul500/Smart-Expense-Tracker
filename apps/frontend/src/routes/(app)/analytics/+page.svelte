@@ -16,7 +16,7 @@
 		AlertCircle,
 		Wallet,
 		Calendar,
-		Activity,
+		Activity
 	} from 'lucide-svelte';
 
 	// ── State ─────────────────────────────────────────────────────────────────
@@ -82,7 +82,6 @@
 	}
 
 	// ── Computed chart values ─────────────────────────────────────────────────
-	// Total for pie chart
 	const totalCategorySpend = $derived(
 		analytics ? analytics.categoryBreakdown.reduce((s, c) => s + c.total, 0) : 1
 	);
@@ -106,42 +105,42 @@
 
 <svelte:head>
 	<title>Analytics — FinPilot AI</title>
-	<meta name="description" content="Deep financial insights and spending analytics powered by AI." />
+	<meta name="description" content="Financial analytics, cash flow distributions, and spending intelligence." />
 </svelte:head>
 
 <div class="space-y-6 max-w-7xl">
 	<!-- Header -->
-	<header class="flex items-center justify-between">
+	<header class="flex items-center justify-between pb-2 border-b border-border/60">
 		<div>
-			<h1 class="text-3xl font-bold tracking-tight">Analytics</h1>
-			<p class="text-muted-foreground mt-1 text-sm">Deep insights into your financial patterns.</p>
+			<h1 class="text-2xl font-semibold tracking-tight text-foreground">Financial Analytics</h1>
+			<p class="text-muted-foreground mt-1 text-xs">Temporal trends, category concentrations, and savings velocity.</p>
 		</div>
 		<button
 			onclick={() => fetchAnalytics({ currency: uiState.currency })}
-			class="flex items-center gap-2 px-3 py-2 rounded-xl bg-secondary/60 border border-border/60 text-sm text-muted-foreground hover:text-foreground transition-all"
+			class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-secondary/80 border border-border/70 text-xs font-medium text-foreground hover:bg-secondary transition-colors"
 		>
-			<Activity class="w-4 h-4" />
+			<Activity class="w-3.5 h-3.5 text-primary" />
 			Refresh
 		</button>
 	</header>
 
 	<!-- Filters Toolbar -->
-	<div class="flex flex-wrap gap-4 items-center justify-between p-4 bg-card border border-border/60 rounded-2xl shadow-sm">
-		<div class="flex flex-wrap gap-5 items-center">
+	<div class="flex flex-wrap gap-4 items-center justify-between p-3.5 bg-card border border-border/70 rounded-xl shadow-xs">
+		<div class="flex flex-wrap gap-4 items-center">
 			<!-- Date Range Quick Filter -->
-			<div class="flex flex-col gap-1">
-				<span class="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest px-1">Date Range</span>
-				<div class="flex p-0.5 rounded-xl bg-secondary/40 border border-border/40">
+			<div class="flex items-center gap-2">
+				<span class="text-xs font-medium text-muted-foreground">Range:</span>
+				<div class="flex p-0.5 rounded-lg bg-secondary/40 border border-border/60">
 					{#each [
-						{ label: 'All Time', value: 'all' },
+						{ label: 'All', value: 'all' },
 						{ label: '30 Days', value: '30days' },
 						{ label: '6 Months', value: '6months' },
 						{ label: '1 Year', value: '1year' }
 					] as opt}
 						<button
 							onclick={() => (dateRange = opt.value as any)}
-							class="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all
-								{dateRange === opt.value ? 'bg-primary text-white shadow-sm' : 'text-muted-foreground hover:text-foreground hover:bg-secondary/45'}"
+							class="px-2.5 py-1 rounded text-xs font-medium transition-colors
+								{dateRange === opt.value ? 'bg-primary text-primary-foreground font-semibold shadow-xs' : 'text-muted-foreground hover:text-foreground hover:bg-secondary/60'}"
 						>
 							{opt.label}
 						</button>
@@ -150,11 +149,11 @@
 			</div>
 
 			<!-- Category Filter -->
-			<div class="flex flex-col gap-1 min-w-[150px]">
-				<span class="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest px-1">Category</span>
+			<div class="flex items-center gap-2">
+				<span class="text-xs font-medium text-muted-foreground">Category:</span>
 				<select
 					bind:value={selectedCategory}
-					class="bg-secondary/40 text-xs border border-border/40 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary/45 cursor-pointer text-muted-foreground hover:text-foreground transition-all"
+					class="bg-secondary/40 text-xs border border-border/60 rounded-lg px-2.5 py-1 text-foreground focus:outline-none focus:ring-2 focus:ring-ring cursor-pointer"
 				>
 					<option value="">All Categories</option>
 					{#if analytics}
@@ -167,79 +166,74 @@
 		</div>
 
 		<!-- Currency Indicator -->
-		<div class="text-right p-1">
-			<span class="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest block">Active Currency</span>
-			<span class="text-sm font-bold text-primary">{uiState.currency} ({uiState.currencySymbol})</span>
+		<div class="text-xs text-muted-foreground">
+			Currency: <span class="font-mono font-medium text-foreground">{uiState.currency} ({uiState.currencySymbol})</span>
 		</div>
 	</div>
 
 	{#if isLoading}
-		<div class="flex items-center justify-center py-32">
-			<div class="flex flex-col items-center gap-3 text-muted-foreground">
-				<Loader2 class="w-9 h-9 animate-spin text-primary" />
-				<p class="text-sm">Loading analytics…</p>
+		<div class="flex items-center justify-center py-24">
+			<div class="flex flex-col items-center gap-2 text-muted-foreground">
+				<Loader2 class="w-6 h-6 animate-spin text-primary" />
+				<span class="text-xs">Computing analytical distributions…</span>
 			</div>
 		</div>
 
 	{:else if error}
-		<div class="flex items-center gap-3 p-5 rounded-2xl bg-destructive/10 border border-destructive/30 text-destructive">
-			<AlertCircle class="w-5 h-5 shrink-0" />
-			<p class="text-sm font-medium">{error}</p>
-			<button onclick={() => fetchAnalytics({ currency: uiState.currency })} class="ml-auto text-sm underline hover:no-underline">Retry</button>
+		<div class="flex items-center gap-3 p-4 rounded-xl bg-destructive/10 border border-destructive/25 text-destructive text-xs">
+			<AlertCircle class="w-4 h-4 shrink-0" />
+			<p class="font-medium">{error}</p>
+			<button onclick={() => fetchAnalytics({ currency: uiState.currency })} class="ml-auto underline hover:no-underline font-semibold">Retry</button>
 		</div>
 
 	{:else if !analytics || analytics.transactionCount === 0}
-		<div class="flex flex-col items-center justify-center py-32 text-center gap-4">
-			<div class="w-20 h-20 rounded-3xl bg-primary/10 flex items-center justify-center">
-				<BarChart3 class="w-10 h-10 text-primary" />
+		<div class="flex flex-col items-center justify-center py-20 text-center gap-3 bg-card border border-border/70 rounded-xl p-8">
+			<div class="w-10 h-10 rounded-lg bg-secondary flex items-center justify-center text-muted-foreground">
+				<BarChart3 class="w-5 h-5" />
 			</div>
 			<div>
-				<h2 class="text-xl font-bold">No data matching filters</h2>
-				<p class="text-muted-foreground text-sm mt-1 max-w-sm">Try broadening your filters or add transactions in the selected currency ({uiState.currency}).</p>
+				<h2 class="text-sm font-semibold text-foreground">No records matching active criteria</h2>
+				<p class="text-muted-foreground text-xs mt-0.5 max-w-sm">Try broadening your date filter or switch currency settings ({uiState.currency}).</p>
 			</div>
-			<a href="/transactions?new=true" class="px-5 py-2.5 rounded-xl bg-primary text-white font-semibold text-sm hover:bg-primary/90 transition-all shadow-lg shadow-primary/30">
-				Add Transaction
+			<a href="/transactions?new=true" class="px-3.5 py-1.5 rounded-lg bg-primary text-primary-foreground font-medium text-xs hover:bg-primary/90 transition-colors shadow-xs">
+				Record Entry
 			</a>
 		</div>
 
 	{:else}
-		<!-- ── KPI Summary Row ──────────────────────────────────────────────────── -->
-		<div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+		<!-- KPI Summary Row -->
+		<div class="grid grid-cols-2 md:grid-cols-4 gap-3">
 			{#each [
-				{ label: 'Total Income', value: analytics.totalIncome, color: 'text-emerald-400', bg: 'bg-emerald-500/10', Icon: TrendingUp },
-				{ label: 'Total Expenses', value: analytics.totalExpenses, color: 'text-red-400', bg: 'bg-red-500/10', Icon: TrendingDown },
-				{ label: 'Net Savings', value: analytics.totalSavings, color: analytics.totalSavings >= 0 ? 'text-indigo-400' : 'text-destructive', bg: 'bg-indigo-500/10', Icon: Wallet },
+				{ label: 'Cumulative Inflow', value: analytics.totalIncome, color: 'text-emerald-400', bg: 'bg-emerald-500/10', Icon: TrendingUp },
+				{ label: 'Cumulative Outflow', value: analytics.totalExpenses, color: 'text-foreground', bg: 'bg-destructive/10', Icon: TrendingDown },
+				{ label: 'Net Capital Retained', value: analytics.totalSavings, color: analytics.totalSavings >= 0 ? 'text-primary' : 'text-destructive', bg: 'bg-primary/10', Icon: Wallet },
 				{ label: 'Health Score', value: analytics.healthScore, suffix: '/100', color: analytics.healthScore >= 60 ? 'text-emerald-400' : 'text-amber-400', bg: 'bg-amber-500/10', Icon: Activity },
 			] as kpi}
-				<div class="p-5 rounded-2xl bg-card border border-border/60 shadow-sm hover:border-primary/20 transition-all">
-					<div class="flex items-center justify-between mb-3">
-						<p class="text-xs font-medium text-muted-foreground uppercase tracking-wider">{kpi.label}</p>
-						<div class="w-8 h-8 rounded-lg {kpi.bg} flex items-center justify-center">
-							<kpi.Icon class="w-4 h-4 {kpi.color}" />
-						</div>
+				<div class="p-4 rounded-xl bg-card border border-border/70 shadow-xs">
+					<div class="flex items-center justify-between mb-2">
+						<p class="text-xs font-medium text-muted-foreground">{kpi.label}</p>
+						<kpi.Icon class="w-3.5 h-3.5 {kpi.color}" />
 					</div>
-					<p class="text-2xl font-bold tracking-tight {kpi.color}">
+					<p class="text-xl font-semibold tracking-tight font-mono {kpi.color}">
 						{kpi.suffix ? kpi.value : fmt(kpi.value)}{kpi.suffix ?? ''}
 					</p>
 				</div>
 			{/each}
 		</div>
 
-		<!-- ── Main Charts Row ──────────────────────────────────────────────────── -->
-		<div class="grid grid-cols-1 lg:grid-cols-5 gap-5">
-
+		<!-- Main Charts Row -->
+		<div class="grid grid-cols-1 lg:grid-cols-5 gap-4">
 			<!-- Monthly Bar Chart -->
-			<div class="lg:col-span-3 p-5 rounded-2xl bg-card border border-border/60 shadow-sm flex flex-col justify-between">
-				<div>
-					<div class="flex items-center gap-2 mb-1">
+			<div class="lg:col-span-3 p-5 rounded-xl bg-card border border-border/70 shadow-xs flex flex-col justify-between">
+				<div class="mb-4">
+					<div class="flex items-center gap-2">
 						<BarChart3 class="w-4 h-4 text-primary" />
-						<h2 class="font-semibold text-sm">Monthly Income vs Expenses</h2>
+						<h2 class="font-medium text-xs text-muted-foreground">Monthly Inflow vs Outflow</h2>
 					</div>
-					<p class="text-xs text-muted-foreground mb-5">Chronological comparison</p>
 				</div>
 
 				{#if analytics.monthlyTrend.length === 0}
-					<div class="flex items-center justify-center h-48 text-muted-foreground text-sm">No monthly data yet</div>
+					<div class="flex items-center justify-center h-48 text-muted-foreground text-xs">Insufficient monthly data</div>
 				{:else}
 					<div class="flex-1 min-h-[220px]">
 						<MonthlyChart data={analytics.monthlyTrend} fmt={fmt} />
@@ -248,31 +242,30 @@
 			</div>
 
 			<!-- Pie Chart -->
-			<div class="lg:col-span-2 p-5 rounded-2xl bg-card border border-border/60 shadow-sm flex flex-col justify-between">
-				<div>
-					<div class="flex items-center gap-2 mb-1">
-						<PieChart class="w-4 h-4 text-indigo-400" />
-						<h2 class="font-semibold text-sm">Category Breakdown</h2>
+			<div class="lg:col-span-2 p-5 rounded-xl bg-card border border-border/70 shadow-xs flex flex-col justify-between">
+				<div class="mb-3">
+					<div class="flex items-center gap-2">
+						<PieChart class="w-4 h-4 text-primary" />
+						<h2 class="font-medium text-xs text-muted-foreground">Category Concentration</h2>
 					</div>
-					<p class="text-xs text-muted-foreground mb-4">Spending distribution</p>
 				</div>
 
 				{#if analytics.categoryBreakdown.length === 0}
-					<div class="flex items-center justify-center h-48 text-muted-foreground text-sm">No category data</div>
+					<div class="flex items-center justify-center h-48 text-muted-foreground text-xs">No category data</div>
 				{:else}
-					<div class="flex flex-col gap-4">
-						<div class="h-40 relative">
+					<div class="flex flex-col gap-3">
+						<div class="h-36 relative">
 							<DoughnutChart data={analytics.categoryBreakdown} fmt={fmt} />
 						</div>
 
 						<!-- Legend -->
-						<div class="w-full space-y-1.5 max-h-36 overflow-y-auto pr-1">
+						<div class="w-full space-y-1 max-h-32 overflow-y-auto pr-1">
 							{#each pieSlices as slice}
 								<div class="flex items-center gap-2 text-xs">
-									<span class="w-2.5 h-2.5 rounded-sm shrink-0" style="background:{slice.color}"></span>
+									<span class="w-2 h-2 rounded-xs shrink-0" style="background:{slice.color}"></span>
 									<span class="flex-1 text-muted-foreground truncate">{slice.name}</span>
-									<span class="font-semibold">{fmt(slice.total)}</span>
-									<span class="text-muted-foreground w-8 text-right">{Math.round(slice.pct * 100)}%</span>
+									<span class="font-mono font-medium text-foreground">{fmt(slice.total)}</span>
+									<span class="text-muted-foreground w-8 text-right font-mono text-[11px]">{Math.round(slice.pct * 100)}%</span>
 								</div>
 							{/each}
 						</div>
@@ -281,21 +274,19 @@
 			</div>
 		</div>
 
-		<!-- ── Weekly Trend + Savings Rate ──────────────────────────────────────── -->
-		<div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
-
+		<!-- Weekly Trend + Savings Velocity -->
+		<div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
 			<!-- Weekly Bar Chart -->
-			<div class="lg:col-span-2 p-5 rounded-2xl bg-card border border-border/60 shadow-sm flex flex-col justify-between">
-				<div>
-					<div class="flex items-center gap-2 mb-1">
-						<Calendar class="w-4 h-4 text-amber-400" />
-						<h2 class="font-semibold text-sm">Weekly Activity</h2>
+			<div class="lg:col-span-2 p-5 rounded-xl bg-card border border-border/70 shadow-xs flex flex-col justify-between">
+				<div class="mb-3">
+					<div class="flex items-center gap-2">
+						<Calendar class="w-4 h-4 text-primary" />
+						<h2 class="font-medium text-xs text-muted-foreground">Weekly Velocity</h2>
 					</div>
-					<p class="text-xs text-muted-foreground mb-5">Current & recent weeks</p>
 				</div>
 
 				{#if analytics.weeklyTrend.length === 0}
-					<div class="flex items-center justify-center h-36 text-muted-foreground text-sm">No weekly data</div>
+					<div class="flex items-center justify-center h-32 text-muted-foreground text-xs">No weekly activity</div>
 				{:else}
 					<div class="flex-1 min-h-[140px]">
 						<WeeklyChart data={analytics.weeklyTrend} fmt={fmt} />
@@ -303,125 +294,89 @@
 				{/if}
 			</div>
 
-			<!-- Savings Rate Card -->
-			<div class="p-5 rounded-2xl bg-card border border-border/60 shadow-sm flex flex-col gap-4">
+			<!-- Savings Velocity Card -->
+			<div class="p-5 rounded-xl bg-card border border-border/70 shadow-xs flex flex-col gap-3">
 				<div class="flex items-center gap-2">
 					<TrendingUp class="w-4 h-4 text-emerald-400" />
-					<h2 class="font-semibold text-sm">Savings Rate</h2>
+					<h2 class="font-medium text-xs text-muted-foreground">Retention Velocity</h2>
 				</div>
 
-				<!-- Big number -->
-				<div class="flex-1 flex flex-col items-center justify-center gap-3 py-4">
-					<div class="relative w-32 h-32">
+				<div class="flex-1 flex flex-col items-center justify-center gap-2 py-2">
+					<div class="relative w-28 h-28">
 						<svg viewBox="0 0 100 100" class="w-full h-full -rotate-90">
-							<circle cx="50" cy="50" r="40" fill="none" stroke="var(--color-border, #222)" stroke-width="10" />
+							<circle cx="50" cy="50" r="40" fill="none" stroke="var(--color-border, #1f2537)" stroke-width="8" />
 							<circle
 								cx="50" cy="50" r="40" fill="none"
-								stroke={savingsRate >= 20 ? '#22c55e' : savingsRate >= 10 ? '#f59e0b' : '#ef4444'}
-								stroke-width="10"
+								stroke={savingsRate >= 20 ? '#10b981' : savingsRate >= 10 ? '#f59e0b' : '#ef4444'}
+								stroke-width="8"
 								stroke-linecap="round"
 								stroke-dasharray="{(savingsRate / 100) * 251.2} 251.2"
-								class="transition-all duration-1000"
+								class="transition-all duration-700"
 							/>
 						</svg>
 						<div class="absolute inset-0 flex flex-col items-center justify-center">
-							<p class="text-2xl font-bold">{savingsRate}%</p>
-							<p class="text-[10px] text-muted-foreground">saved</p>
+							<p class="text-xl font-bold font-mono text-foreground">{savingsRate}%</p>
+							<p class="text-[10px] text-muted-foreground">retained</p>
 						</div>
 					</div>
-					<div class="text-center space-y-1">
-						<p class="text-sm text-muted-foreground">of <span class="font-semibold text-foreground">{fmt(analytics.totalIncome)}</span> income</p>
-						<p class="text-xs text-muted-foreground">
-							{savingsRate >= 20 ? '🟢 Excellent! Keep it up.' : savingsRate >= 10 ? '🟡 Good, aim for 20%.' : '🔴 Try to save more.'}
+					<div class="text-center space-y-0.5">
+						<p class="text-xs text-muted-foreground">of <span class="font-mono font-medium text-foreground">{fmt(analytics.totalIncome)}</span> inflow</p>
+						<p class="text-[11px] text-muted-foreground">
+							{savingsRate >= 20 ? 'Optimal capital accumulation' : savingsRate >= 10 ? 'Acceptable buffer velocity' : 'Low retention rate'}
 						</p>
 					</div>
 				</div>
 
-				<div class="grid grid-cols-2 gap-2 text-xs">
-					<div class="p-2.5 rounded-xl bg-secondary/40 text-center">
-						<p class="text-muted-foreground">Avg/Month</p>
-						<p class="font-semibold mt-0.5">
+				<div class="grid grid-cols-2 gap-2 text-xs pt-2 border-t border-border/50">
+					<div class="p-2 rounded-lg bg-secondary/40 text-center">
+						<p class="text-muted-foreground text-[11px]">Monthly Average</p>
+						<p class="font-mono font-medium text-foreground mt-0.5">
 							{analytics.monthlyTrend.length > 0
 								? fmt(analytics.monthlyTrend.reduce((s, m) => s + m.expenses, 0) / analytics.monthlyTrend.length)
 								: fmt(0)}
 						</p>
 					</div>
-					<div class="p-2.5 rounded-xl bg-secondary/40 text-center">
-						<p class="text-muted-foreground">Transactions</p>
-						<p class="font-semibold mt-0.5">{analytics.transactionCount}</p>
+					<div class="p-2 rounded-lg bg-secondary/40 text-center">
+						<p class="text-muted-foreground text-[11px]">Ledger Entries</p>
+						<p class="font-mono font-medium text-foreground mt-0.5">{analytics.transactionCount}</p>
 					</div>
 				</div>
 			</div>
 		</div>
 
-		<!-- ── This Month vs Last Month ─────────────────────────────────────────── -->
-		<div class="p-5 rounded-2xl bg-card border border-border/60 shadow-sm">
-			<div class="flex items-center gap-2 mb-4">
+		<!-- This Month vs Last Month -->
+		<div class="p-5 rounded-xl bg-card border border-border/70 shadow-xs">
+			<div class="flex items-center gap-2 mb-3">
 				<ArrowUpRight class="w-4 h-4 text-primary" />
-				<h2 class="font-semibold text-sm">This Month vs Last Month</h2>
+				<h2 class="font-medium text-xs text-muted-foreground">Period Comparison (M/M)</h2>
 			</div>
-			<div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+			<div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
 				{#each [
-					{ label: 'Income', current: analytics.thisMonth.income, prev: analytics.lastMonth.income, good: true },
-					{ label: 'Expenses', current: analytics.thisMonth.expenses, prev: analytics.lastMonth.expenses, good: false },
-					{ label: 'Cash Flow', current: analytics.thisMonth.cashFlow, prev: analytics.lastMonth.income - analytics.lastMonth.expenses, good: true },
+					{ label: 'Inflow', current: analytics.thisMonth.income, prev: analytics.lastMonth.income, good: true },
+					{ label: 'Outflow', current: analytics.thisMonth.expenses, prev: analytics.lastMonth.expenses, good: false },
+					{ label: 'Net Cash Flow', current: analytics.thisMonth.cashFlow, prev: analytics.lastMonth.income - analytics.lastMonth.expenses, good: true },
 				] as item}
 					{@const diff = item.current - item.prev}
 					{@const pct = item.prev > 0 ? ((diff / item.prev) * 100).toFixed(1) : '—'}
 					{@const positive = diff >= 0}
 					{@const isGood = item.good ? positive : !positive}
-					<div class="p-4 rounded-xl bg-secondary/30 border border-border/40">
-						<p class="text-xs text-muted-foreground mb-2 font-medium uppercase tracking-wider">{item.label}</p>
-						<p class="text-xl font-bold">{fmt(item.current)}</p>
-						<div class="flex items-center gap-1.5 mt-1.5">
+					<div class="p-3.5 rounded-lg bg-secondary/40 border border-border/50">
+						<p class="text-xs text-muted-foreground mb-1">{item.label}</p>
+						<p class="text-lg font-semibold font-mono text-foreground">{fmt(item.current)}</p>
+						<div class="flex items-center gap-1.5 mt-1 text-xs">
 							{#if diff >= 0}
-								<ArrowUpRight class="w-3 h-3 {isGood ? 'text-emerald-400' : 'text-red-400'}" />
+								<ArrowUpRight class="w-3.5 h-3.5 {isGood ? 'text-emerald-400' : 'text-destructive'}" />
 							{:else}
-								<ArrowDownRight class="w-3 h-3 {isGood ? 'text-emerald-400' : 'text-red-400'}" />
+								<ArrowDownRight class="w-3.5 h-3.5 {isGood ? 'text-emerald-400' : 'text-destructive'}" />
 							{/if}
-							<span class="text-xs {isGood ? 'text-emerald-400' : 'text-red-400'} font-semibold">
+							<span class="{isGood ? 'text-emerald-400' : 'text-destructive'} font-mono font-medium">
 								{pct === '—' ? '—' : `${positive ? '+' : ''}${pct}%`}
 							</span>
-							<span class="text-xs text-muted-foreground">vs last month</span>
+							<span class="text-muted-foreground text-[11px]">vs prior cycle</span>
 						</div>
-						<p class="text-xs text-muted-foreground mt-1">Last: {fmt(item.prev)}</p>
 					</div>
 				{/each}
 			</div>
 		</div>
-
-		<!-- ── Top Categories Table ─────────────────────────────────────────────── -->
-		{#if analytics.categoryBreakdown.length > 0}
-			<div class="p-5 rounded-2xl bg-card border border-border/60 shadow-sm">
-				<div class="flex items-center gap-2 mb-4">
-					<PieChart class="w-4 h-4 text-indigo-400" />
-					<h2 class="font-semibold text-sm">Top Spending Categories</h2>
-				</div>
-				<div class="space-y-3">
-					{#each analytics.categoryBreakdown.slice(0, 6) as cat}
-						{@const pct = totalCategorySpend > 0 ? (cat.total / totalCategorySpend) * 100 : 0}
-						<div class="space-y-1">
-							<div class="flex items-center justify-between text-sm">
-								<div class="flex items-center gap-2">
-									<span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:{cat.color}"></span>
-									<span class="font-medium">{cat.name}</span>
-									<span class="text-xs text-muted-foreground">{cat.count} txn{cat.count !== 1 ? 's' : ''}</span>
-								</div>
-								<div class="flex items-center gap-3">
-									<span class="text-xs text-muted-foreground">{pct.toFixed(1)}%</span>
-									<span class="font-semibold text-sm">{fmt(cat.total)}</span>
-								</div>
-							</div>
-							<div class="w-full h-1.5 bg-border/40 rounded-full overflow-hidden">
-								<div
-									class="h-full rounded-full transition-all duration-700"
-									style="width:{pct}%; background:{cat.color}"
-								></div>
-							</div>
-						</div>
-					{/each}
-				</div>
-			</div>
-		{/if}
 	{/if}
 </div>

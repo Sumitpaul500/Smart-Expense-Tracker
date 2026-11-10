@@ -2,7 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { authState, login } from '$lib/stores/auth.svelte';
 	import { authApi } from '$lib/api';
-	import { Wallet, Loader2, Eye, EyeOff, User, Mail, Lock, CheckCircle2 } from 'lucide-svelte';
+	import { ShieldCheck, Loader2, Eye, EyeOff, User, Mail, Lock, CheckCircle2 } from 'lucide-svelte';
 	import { onMount } from 'svelte';
 	import { z } from 'zod';
 
@@ -54,7 +54,7 @@
 		const map = [
 			{ label: 'Too short', color: 'bg-destructive' },
 			{ label: 'Weak', color: 'bg-destructive' },
-			{ label: 'Fair', color: 'bg-amber-500' },
+			{ label: 'Moderate', color: 'bg-amber-500' },
 			{ label: 'Good', color: 'bg-emerald-400' },
 			{ label: 'Strong', color: 'bg-emerald-500' }
 		];
@@ -78,19 +78,22 @@
 		if (!result.success) {
 			const errs: Record<string, string> = {};
 			for (const issue of result.error.issues) {
-				const key = issue.path[0] as string;
-				errs[key] = issue.message;
+				const field = issue.path[0] as string;
+				if (!errs[field]) errs[field] = issue.message;
 			}
 			fieldErrors = errs;
 			return;
 		}
 
 		isLoading = true;
-
 		try {
-			const data = await authApi.register({ firstName, lastName, email, password });
+			const data = await authApi.register({
+				firstName: firstName.trim(),
+				lastName: lastName.trim(),
+				email: email.trim().toLowerCase(),
+				password
+			});
 
-			// Backend returns { _id, email, firstName, lastName, token } directly
 			login(
 				{
 					id: data._id,
@@ -100,9 +103,10 @@
 				},
 				data.token
 			);
+
 			goto('/');
-		} catch (e: any) {
-			error = e.message ?? 'Registration failed. Please try again.';
+		} catch (err: any) {
+			error = err.message ?? 'Registration failed. Please try again.';
 		} finally {
 			isLoading = false;
 		}
@@ -113,229 +117,208 @@
 	<title>Create Account — FinPilot AI</title>
 	<meta
 		name="description"
-		content="Create your free FinPilot AI account and take control of your finances with AI-powered insights."
+		content="Register an institutional FinPilot account to track expenses, parse receipts, and manage automated reconciliation."
 	/>
 </svelte:head>
 
-<div class="min-h-screen bg-background flex items-center justify-center relative overflow-hidden p-4 py-10">
-	<!-- Decorative gradient orbs -->
-	<div class="absolute inset-0 pointer-events-none overflow-hidden">
-		<div class="absolute -top-60 -right-60 w-[500px] h-[500px] bg-primary/15 rounded-full blur-[120px]"></div>
-		<div class="absolute -bottom-60 -left-60 w-[500px] h-[500px] bg-indigo-500/10 rounded-full blur-[120px]"></div>
-		<div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[300px] bg-cyan-500/5 rounded-full blur-[80px]"></div>
-	</div>
-
-	<!-- Subtle grid overlay -->
-	<div
-		class="absolute inset-0 pointer-events-none"
-		style="background-image: linear-gradient(to right, #1e234008 1px, transparent 1px), linear-gradient(to bottom, #1e234008 1px, transparent 1px); background-size: 32px 32px;"
-	></div>
-
-	<div class="relative z-10 w-full max-w-[460px]">
+<div class="min-h-screen bg-background flex items-center justify-center p-4 py-8">
+	<div class="relative z-10 w-full max-w-[420px]">
 		<!-- Logo mark -->
-		<div class="flex flex-col items-center mb-8">
-			<div class="w-14 h-14 rounded-2xl bg-primary flex items-center justify-center mb-4 shadow-2xl shadow-primary/40">
-				<Wallet class="w-7 h-7 text-white" />
+		<div class="flex flex-col items-center mb-6">
+			<div class="w-10 h-10 rounded-lg bg-primary/10 border border-primary/25 flex items-center justify-center text-primary mb-3">
+				<ShieldCheck class="w-5 h-5" />
 			</div>
-			<h1 class="text-3xl font-bold tracking-tight text-foreground">FinPilot AI</h1>
-			<p class="text-muted-foreground mt-1.5 text-sm">Your AI-powered financial copilot</p>
+			<h1 class="text-xl font-semibold tracking-tight text-foreground">FinPilot AI</h1>
+			<p class="text-muted-foreground mt-0.5 text-xs">Financial Control & Ledger Intelligence</p>
 		</div>
 
 		<!-- Card -->
-		<div class="bg-card border border-border/60 rounded-2xl p-8 shadow-2xl shadow-black/60 backdrop-blur-xl">
-			<h2 class="text-xl font-semibold mb-1">Create your account</h2>
-			<p class="text-muted-foreground text-sm mb-6">Get started free — no credit card required</p>
+		<div class="bg-card border border-border/80 rounded-xl p-6 shadow-xs">
+			<h2 class="text-base font-semibold mb-1 text-foreground">Create Account</h2>
+			<p class="text-muted-foreground text-xs mb-5">Set up your profile to access financial ledgers</p>
 
 			<!-- Global error -->
 			{#if error}
-				<div class="mb-5 p-3.5 bg-destructive/10 border border-destructive/30 rounded-xl text-destructive text-sm flex items-center gap-2">
+				<div class="mb-4 p-3 bg-destructive/10 border border-destructive/25 rounded-lg text-destructive text-xs flex items-center gap-2">
 					<span class="shrink-0 font-bold">!</span>
-					{error}
+					<span>{error}</span>
 				</div>
 			{/if}
 
-			<form onsubmit={handleSubmit} class="space-y-4">
+			<form onsubmit={handleSubmit} class="space-y-3.5">
 				<!-- Name row -->
 				<div class="grid grid-cols-2 gap-3">
 					<!-- First name -->
-					<div class="space-y-1.5">
-						<label for="firstName" class="text-sm font-medium text-foreground">First name</label>
+					<div class="space-y-1">
+						<label for="firstName" class="text-xs font-medium text-foreground">First name</label>
 						<div class="relative">
-							<User class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+							<User class="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
 							<input
 								id="firstName"
 								type="text"
 								bind:value={firstName}
 								placeholder="Jane"
 								autocomplete="given-name"
-								class="w-full pl-9 pr-4 py-2.5 bg-input border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-ring transition-all placeholder:text-muted-foreground
-									{fieldErrors.firstName ? 'border-destructive' : 'border-border'}"
+								class="w-full pl-8 pr-3 py-2 bg-secondary/30 border rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-ring transition-colors placeholder:text-muted-foreground
+									{fieldErrors.firstName ? 'border-destructive' : 'border-border/70'}"
 							/>
 						</div>
 						{#if fieldErrors.firstName}
-							<p class="text-xs text-destructive">{fieldErrors.firstName}</p>
+							<p class="text-[11px] text-destructive">{fieldErrors.firstName}</p>
 						{/if}
 					</div>
 
 					<!-- Last name -->
-					<div class="space-y-1.5">
-						<label for="lastName" class="text-sm font-medium text-foreground">Last name</label>
+					<div class="space-y-1">
+						<label for="lastName" class="text-xs font-medium text-foreground">Last name</label>
 						<div class="relative">
-							<User class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+							<User class="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
 							<input
 								id="lastName"
 								type="text"
 								bind:value={lastName}
 								placeholder="Doe"
 								autocomplete="family-name"
-								class="w-full pl-9 pr-4 py-2.5 bg-input border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-ring transition-all placeholder:text-muted-foreground
-									{fieldErrors.lastName ? 'border-destructive' : 'border-border'}"
+								class="w-full pl-8 pr-3 py-2 bg-secondary/30 border rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-ring transition-colors placeholder:text-muted-foreground
+									{fieldErrors.lastName ? 'border-destructive' : 'border-border/70'}"
 							/>
 						</div>
 						{#if fieldErrors.lastName}
-							<p class="text-xs text-destructive">{fieldErrors.lastName}</p>
+							<p class="text-[11px] text-destructive">{fieldErrors.lastName}</p>
 						{/if}
 					</div>
 				</div>
 
 				<!-- Email -->
-				<div class="space-y-1.5">
-					<label for="email" class="text-sm font-medium text-foreground">Email address</label>
+				<div class="space-y-1">
+					<label for="email" class="text-xs font-medium text-foreground">Email address</label>
 					<div class="relative">
-						<Mail class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+						<Mail class="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
 						<input
 							id="email"
 							type="email"
 							bind:value={email}
-							placeholder="you@example.com"
+							placeholder="jane.doe@example.com"
 							autocomplete="email"
-							class="w-full pl-9 pr-4 py-2.5 bg-input border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-ring transition-all placeholder:text-muted-foreground
-								{fieldErrors.email ? 'border-destructive' : 'border-border'}"
+							class="w-full pl-8 pr-3 py-2 bg-secondary/30 border rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-ring transition-colors placeholder:text-muted-foreground
+								{fieldErrors.email ? 'border-destructive' : 'border-border/70'}"
 						/>
 					</div>
 					{#if fieldErrors.email}
-						<p class="text-xs text-destructive">{fieldErrors.email}</p>
+						<p class="text-[11px] text-destructive">{fieldErrors.email}</p>
 					{/if}
 				</div>
 
 				<!-- Password -->
-				<div class="space-y-1.5">
-					<label for="password" class="text-sm font-medium text-foreground">Password</label>
+				<div class="space-y-1">
+					<label for="password" class="text-xs font-medium text-foreground">Password</label>
 					<div class="relative">
-						<Lock class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+						<Lock class="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
 						<input
 							id="password"
 							type={showPassword ? 'text' : 'password'}
 							bind:value={password}
 							placeholder="Min. 8 characters"
 							autocomplete="new-password"
-							class="w-full pl-9 pr-11 py-2.5 bg-input border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-ring transition-all placeholder:text-muted-foreground
-								{fieldErrors.password ? 'border-destructive' : 'border-border'}"
+							class="w-full pl-8 pr-9 py-2 bg-secondary/30 border rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-ring transition-colors placeholder:text-muted-foreground
+								{fieldErrors.password ? 'border-destructive' : 'border-border/70'}"
 						/>
 						<button
 							type="button"
 							onclick={() => (showPassword = !showPassword)}
-							class="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+							class="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors p-1"
 							aria-label="Toggle password visibility"
 						>
 							{#if showPassword}
-								<EyeOff class="w-4 h-4" />
+								<EyeOff class="w-3.5 h-3.5" />
 							{:else}
-								<Eye class="w-4 h-4" />
+								<Eye class="w-3.5 h-3.5" />
 							{/if}
 						</button>
 					</div>
 
 					<!-- Password strength meter -->
 					{#if password}
-						<div class="space-y-1">
+						<div class="space-y-1 pt-1">
 							<div class="flex gap-1">
 								{#each [1, 2, 3, 4] as step}
 									<div
 										class="h-1 flex-1 rounded-full transition-all duration-300
-											{passwordStrength.score >= step ? passwordStrength.color : 'bg-border'}"
+											{passwordStrength.score >= step ? passwordStrength.color : 'bg-secondary'}"
 									></div>
 								{/each}
 							</div>
-							<p class="text-xs text-muted-foreground">
+							<p class="text-[11px] text-muted-foreground">
 								Strength: <span class="font-medium text-foreground">{passwordStrength.label}</span>
 							</p>
 						</div>
 					{/if}
 					{#if fieldErrors.password}
-						<p class="text-xs text-destructive">{fieldErrors.password}</p>
+						<p class="text-[11px] text-destructive">{fieldErrors.password}</p>
 					{/if}
 				</div>
 
 				<!-- Confirm password -->
-				<div class="space-y-1.5">
-					<label for="confirmPassword" class="text-sm font-medium text-foreground">Confirm password</label>
+				<div class="space-y-1">
+					<label for="confirmPassword" class="text-xs font-medium text-foreground">Confirm password</label>
 					<div class="relative">
-						<Lock class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+						<Lock class="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
 						<input
 							id="confirmPassword"
 							type={showConfirm ? 'text' : 'password'}
 							bind:value={confirmPassword}
-							placeholder="Repeat your password"
+							placeholder="Repeat password"
 							autocomplete="new-password"
-							class="w-full pl-9 pr-11 py-2.5 bg-input border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-ring transition-all placeholder:text-muted-foreground
-								{fieldErrors.confirmPassword ? 'border-destructive' : confirmPassword && confirmPassword === password ? 'border-emerald-500' : 'border-border'}"
+							class="w-full pl-8 pr-9 py-2 bg-secondary/30 border rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-ring transition-colors placeholder:text-muted-foreground
+								{fieldErrors.confirmPassword ? 'border-destructive' : confirmPassword && confirmPassword === password ? 'border-emerald-500/80' : 'border-border/70'}"
 						/>
-						<div class="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1">
+						<div class="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center">
 							{#if confirmPassword && confirmPassword === password}
-								<CheckCircle2 class="w-4 h-4 text-emerald-500" />
+								<CheckCircle2 class="w-3.5 h-3.5 text-emerald-500" />
 							{:else}
 								<button
 									type="button"
 									onclick={() => (showConfirm = !showConfirm)}
-									class="text-muted-foreground hover:text-foreground transition-colors"
+									class="text-muted-foreground hover:text-foreground transition-colors p-1"
 									aria-label="Toggle confirm password visibility"
 								>
 									{#if showConfirm}
-										<EyeOff class="w-4 h-4" />
+										<EyeOff class="w-3.5 h-3.5" />
 									{:else}
-										<Eye class="w-4 h-4" />
+										<Eye class="w-3.5 h-3.5" />
 									{/if}
 								</button>
 							{/if}
 						</div>
 					</div>
 					{#if fieldErrors.confirmPassword}
-						<p class="text-xs text-destructive">{fieldErrors.confirmPassword}</p>
+						<p class="text-[11px] text-destructive">{fieldErrors.confirmPassword}</p>
 					{/if}
 				</div>
-
-				<!-- Terms note -->
-				<p class="text-xs text-muted-foreground">
-					By creating an account you agree to our
-					<a href="/terms" class="text-primary hover:underline">Terms of Service</a>
-					and
-					<a href="/privacy" class="text-primary hover:underline">Privacy Policy</a>.
-				</p>
 
 				<!-- Submit -->
 				<button
 					type="submit"
 					disabled={isLoading}
 					id="register-submit"
-					class="w-full py-2.5 px-4 bg-primary text-white font-semibold rounded-xl hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring transition-all disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg shadow-primary/25 mt-2"
+					class="w-full py-2 px-4 bg-primary text-primary-foreground font-medium text-xs rounded-lg hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-xs mt-2"
 				>
 					{#if isLoading}
-						<Loader2 class="w-4 h-4 animate-spin" />
+						<Loader2 class="w-3.5 h-3.5 animate-spin" />
 						Creating account…
 					{:else}
-						Create free account
+						Create Account
 					{/if}
 				</button>
 			</form>
 
-			<p class="mt-6 text-center text-sm text-muted-foreground">
+			<p class="mt-5 text-center text-xs text-muted-foreground">
 				Already have an account?
 				<a href="/login" class="text-primary hover:underline font-medium">Sign in</a>
 			</p>
 		</div>
 
-		<p class="mt-6 text-center text-xs text-muted-foreground">
+		<p class="mt-4 text-center text-[11px] text-muted-foreground">
 			Protected by industry-standard encryption
 		</p>
 	</div>

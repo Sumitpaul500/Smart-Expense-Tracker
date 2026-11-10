@@ -22,11 +22,11 @@
 {#if !mounted}
 	<!-- Splash loader while auth check runs -->
 	<div class="flex h-screen items-center justify-center bg-background">
-		<div class="flex flex-col items-center gap-4">
+		<div class="flex flex-col items-center gap-3">
 			<div
-				class="w-10 h-10 rounded-full border-2 border-primary border-t-transparent animate-spin"
+				class="w-8 h-8 rounded-full border-2 border-primary border-t-transparent animate-spin"
 			></div>
-			<p class="text-sm text-muted-foreground">Loading FinPilot AI…</p>
+			<p class="text-xs text-muted-foreground">Loading FinPilot…</p>
 		</div>
 	</div>
 {:else}
@@ -36,31 +36,24 @@
 
 		<!-- Main content area -->
 		<main class="flex-1 overflow-y-auto relative flex flex-col min-w-0">
-			<!-- Decorative background layers -->
-			<div
-				class="absolute inset-0 pointer-events-none"
-				style="background-image: linear-gradient(to right, #1e234010 1px, transparent 1px), linear-gradient(to bottom, #1e234010 1px, transparent 1px); background-size: 24px 24px; mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, black 60%, transparent 100%);"
-			></div>
-			<div
-				class="absolute top-0 right-0 w-[500px] h-[400px] bg-primary/5 rounded-full blur-3xl pointer-events-none"
-			></div>
-
 			<!-- Top bar (mobile menu + breadcrumb) -->
 			<header
-				class="sticky top-0 z-20 flex items-center gap-3 px-4 py-3 border-b border-border/40 bg-background/80 backdrop-blur-sm md:hidden"
+				class="sticky top-0 z-20 flex items-center justify-between px-4 py-3 border-b border-border/60 bg-card/90 backdrop-blur-md md:hidden"
 			>
-				<button
-					onclick={toggleSidebar}
-					class="text-muted-foreground hover:text-foreground transition-colors"
-					aria-label="Toggle sidebar"
-				>
-					<Menu class="w-5 h-5" />
-				</button>
-				<span class="font-semibold text-sm">FinPilot AI</span>
+				<div class="flex items-center gap-3">
+					<button
+						onclick={toggleSidebar}
+						class="text-muted-foreground hover:text-foreground transition-colors p-1 rounded-md hover:bg-secondary"
+						aria-label="Toggle sidebar"
+					>
+						<Menu class="w-5 h-5" />
+					</button>
+					<span class="font-semibold text-sm tracking-tight">FinPilot AI</span>
+				</div>
 			</header>
 
 			<!-- Page content -->
-			<div class="flex-1 px-4 py-6 md:px-8 md:py-8 relative z-10">
+			<div class="flex-1 px-4 py-6 md:px-8 md:py-8 relative z-10 max-w-[1600px] w-full mx-auto">
 				{@render children()}
 			</div>
 		</main>

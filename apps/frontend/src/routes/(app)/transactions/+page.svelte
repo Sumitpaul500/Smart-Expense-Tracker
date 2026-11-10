@@ -16,7 +16,7 @@
 		Wallet,
 		X,
 		AlertCircle,
-		Sparkles
+		FileSpreadsheet
 	} from 'lucide-svelte';
 
 	// ── List State ─────────────────────────────────────────────────────────────
@@ -53,11 +53,9 @@
 
 	onMount(async () => {
 		await fetchTransactions();
-		// Detect URL query param to open modal automatically
 		const params = new URLSearchParams(window.location.search);
 		if (params.get('new') === 'true') {
 			showAddModal = true;
-			// Clear URL query parameters cleanly
 			window.history.replaceState({}, '', window.location.pathname);
 		}
 	});
@@ -120,7 +118,6 @@
 				currency: uiState.currency
 			});
 
-			// Reset modal state
 			newAmount = '';
 			newMerchant = '';
 			newDate = new Date().toISOString().split('T')[0];
@@ -128,7 +125,6 @@
 			newRecurring = false;
 			showAddModal = false;
 
-			// Reload transactions list
 			await fetchTransactions();
 		} catch (err: any) {
 			submitError = err.message ?? 'Failed to add transaction';
@@ -145,41 +141,41 @@
 
 <div class="space-y-6 max-w-7xl relative">
 	<!-- Header -->
-	<header class="flex items-center justify-between flex-wrap gap-4">
+	<header class="flex items-center justify-between flex-wrap gap-4 pb-2 border-b border-border/60">
 		<div>
-			<h1 class="text-3xl font-bold tracking-tight">Transactions</h1>
-			<p class="text-muted-foreground mt-1 text-sm">View and manage all your financial activity.</p>
+			<h1 class="text-2xl font-semibold tracking-tight text-foreground">Transactions</h1>
+			<p class="text-muted-foreground mt-1 text-xs">Ledger records, automated parsing, and transaction tracking.</p>
 		</div>
 		<div class="flex items-center gap-2 flex-wrap">
 			<button
 				onclick={() => (showSmsImporter = !showSmsImporter)}
-				class="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-semibold hover:bg-emerald-500/25 transition-all text-sm"
+				class="flex items-center gap-2 px-3.5 py-2 rounded-lg bg-secondary text-foreground border border-border/80 font-medium hover:bg-secondary/80 transition-colors text-xs"
 			>
-				<Sparkles class="w-4 h-4" />
-				{showSmsImporter ? 'Close SMS Importer' : 'Smart SMS Import'}
+				<FileSpreadsheet class="w-3.5 h-3.5 text-primary" />
+				{showSmsImporter ? 'Close Parser' : 'Import Statements'}
 			</button>
 			<button
 				onclick={() => {
 					showAddModal = true;
 					submitError = '';
 				}}
-				class="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-white font-semibold hover:bg-primary/90 transition-all shadow-lg shadow-primary/30 text-sm animate-pulse-subtle"
+				class="flex items-center gap-2 px-3.5 py-2 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors text-xs shadow-xs"
 			>
-				<Plus class="w-4 h-4" />
-				Add Transaction
+				<Plus class="w-3.5 h-3.5" />
+				New Transaction
 			</button>
 			<button
 				onclick={fetchTransactions}
-				class="flex items-center gap-2 px-3 py-2 rounded-xl border border-border/60 bg-secondary/50 hover:bg-secondary text-sm text-muted-foreground hover:text-foreground transition-all"
+				class="flex items-center gap-2 px-3 py-2 rounded-lg border border-border/70 bg-secondary/60 hover:bg-secondary text-xs text-muted-foreground hover:text-foreground transition-colors"
 			>
-				<RefreshCw class="w-4 h-4" />
+				<RefreshCw class="w-3.5 h-3.5" />
 				Refresh
 			</button>
 		</div>
 	</header>
 
 	{#if showSmsImporter}
-		<div transition:slide={{ duration: 200 }}>
+		<div transition:slide={{ duration: 150 }}>
 			<SmartSmsImporter onComplete={fetchTransactions} />
 		</div>
 	{/if}
@@ -192,19 +188,19 @@
 			<input
 				type="text"
 				bind:value={searchQuery}
-				placeholder="Search transactions..."
-				class="w-full pl-9 pr-4 py-2.5 rounded-xl bg-card border border-border/60 text-sm focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground transition-all"
+				placeholder="Search by merchant or tags..."
+				class="w-full pl-9 pr-4 py-2 rounded-lg bg-card border border-border/70 text-xs focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground transition-colors"
 			/>
 		</div>
 		<!-- Type filter tabs -->
-		<div class="flex items-center gap-1 p-1 rounded-xl bg-card border border-border/60">
+		<div class="flex items-center gap-1 p-1 rounded-lg bg-card border border-border/70">
 			{#each ['all', 'income', 'expense', 'transfer'] as type}
 				<button
 					onclick={() => (filterType = type as any)}
-					class="px-3 py-1.5 rounded-lg text-sm font-medium transition-all capitalize
+					class="px-3 py-1 rounded-md text-xs font-medium transition-colors capitalize
 						{filterType === type
-						? 'bg-primary text-white shadow-sm'
-						: 'text-muted-foreground hover:text-foreground hover:bg-secondary'}"
+						? 'bg-primary text-primary-foreground font-semibold'
+						: 'text-muted-foreground hover:text-foreground hover:bg-secondary/70'}"
 				>
 					{type}
 				</button>
@@ -214,111 +210,116 @@
 
 	<!-- Content -->
 	{#if isLoading}
-		<div class="flex items-center justify-center py-24">
-			<Loader2 class="w-8 h-8 animate-spin text-primary" />
+		<div class="flex items-center justify-center py-20">
+			<div class="flex flex-col items-center gap-2 text-muted-foreground">
+				<Loader2 class="w-6 h-6 animate-spin text-primary" />
+				<span class="text-xs">Loading ledger entries…</span>
+			</div>
 		</div>
 	{:else if error}
-		<div class="rounded-2xl bg-red-500/10 border border-red-500/20 p-6 text-center">
-			<p class="text-red-400 font-medium">{error}</p>
+		<div class="rounded-xl bg-destructive/10 border border-destructive/25 p-5 text-center">
+			<p class="text-destructive text-xs font-medium">{error}</p>
 			<button
 				onclick={fetchTransactions}
-				class="mt-3 px-4 py-2 rounded-lg bg-primary text-white text-sm hover:bg-primary/90 transition-all"
+				class="mt-3 px-3.5 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors"
 			>
 				Try Again
 			</button>
 		</div>
 	{:else if filtered.length === 0}
-		<div class="flex flex-col items-center justify-center py-24 text-center">
-			<div class="w-16 h-16 rounded-2xl bg-secondary/80 flex items-center justify-center mb-4">
-				<Wallet class="w-8 h-8 text-muted-foreground" />
+		<div class="flex flex-col items-center justify-center py-16 text-center bg-card border border-border/70 rounded-xl p-8">
+			<div class="w-10 h-10 rounded-lg bg-secondary flex items-center justify-center mb-3 text-muted-foreground">
+				<Wallet class="w-5 h-5" />
 			</div>
-			<p class="text-lg font-semibold">No transactions found</p>
-			<p class="text-muted-foreground text-sm mt-1">
-				{searchQuery ? 'Try a different search term.' : 'Add your first transaction to get started.'}
+			<p class="text-sm font-semibold text-foreground">No transactions found</p>
+			<p class="text-muted-foreground text-xs mt-1">
+				{searchQuery ? 'Adjust your search query or filter settings.' : 'Record your first transaction above.'}
 			</p>
 		</div>
 	{:else}
 		<!-- Transaction list -->
-		<div class="rounded-2xl bg-card border border-border/60 overflow-hidden">
-			<div class="divide-y divide-border/40">
+		<div class="rounded-xl bg-card border border-border/70 overflow-hidden shadow-xs">
+			<div class="divide-y divide-border/50">
 				{#each filtered as tx (tx._id)}
-					<div class="flex items-center gap-4 px-5 py-4 hover:bg-secondary/30 transition-colors group">
+					<div class="flex items-center gap-4 px-5 py-3.5 hover:bg-secondary/40 transition-colors">
 						<!-- Icon -->
 						<div class="shrink-0">
 							{#if tx.type === 'income'}
-								<div class="w-10 h-10 rounded-xl bg-emerald-500/15 flex items-center justify-center">
-									<ArrowUpCircle class="w-5 h-5 text-emerald-400" />
+								<div class="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
+									<ArrowUpCircle class="w-4 h-4" />
 								</div>
 							{:else if tx.type === 'expense'}
-								<div class="w-10 h-10 rounded-xl bg-red-500/15 flex items-center justify-center">
-									<ArrowDownCircle class="w-5 h-5 text-red-400" />
+								<div class="w-8 h-8 rounded-lg bg-destructive/10 text-destructive flex items-center justify-center">
+									<ArrowDownCircle class="w-4 h-4" />
 								</div>
 							{:else}
-								<div class="w-10 h-10 rounded-xl bg-blue-500/15 flex items-center justify-center">
-									<ArrowLeftRight class="w-5 h-5 text-blue-400" />
+								<div class="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+									<ArrowLeftRight class="w-4 h-4" />
 								</div>
 							{/if}
 						</div>
 						<!-- Details -->
 						<div class="flex-1 min-w-0">
-							<p class="font-medium text-sm truncate">{tx.merchant}</p>
+							<p class="font-medium text-xs text-foreground truncate">{tx.merchant}</p>
 							<div class="flex items-center gap-2 mt-0.5">
 								<Calendar class="w-3 h-3 text-muted-foreground" />
-								<span class="text-xs text-muted-foreground">{formatDate(tx.date)}</span>
+								<span class="text-[11px] text-muted-foreground">{formatDate(tx.date)}</span>
 								{#if tx.categoryId}
-									<span class="text-xs px-2 py-0.5 rounded-full bg-secondary text-muted-foreground">{tx.categoryId.name}</span>
+									<span class="text-[11px] px-1.5 py-0.2 rounded bg-secondary text-muted-foreground">{tx.categoryId.name}</span>
 								{/if}
 								{#if tx.isRecurring}
-									<span class="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary">Recurring</span>
+									<span class="text-[11px] px-1.5 py-0.2 rounded bg-primary/10 text-primary font-medium">Recurring</span>
 								{/if}
 							</div>
 						</div>
 						<!-- Amount -->
 						<div class="shrink-0 text-right">
-							<p class="font-semibold text-sm {tx.type === 'income' ? 'text-emerald-400' : tx.type === 'expense' ? 'text-red-400' : 'text-blue-400'}">
+							<p class="font-semibold font-mono text-xs {tx.type === 'income' ? 'text-emerald-400' : tx.type === 'expense' ? 'text-foreground' : 'text-primary'}">
 								{formatAmount(tx.amount, tx.type)}
 							</p>
-							<span class="text-xs capitalize text-muted-foreground">{tx.status ?? 'cleared'}</span>
+							<span class="text-[11px] capitalize text-muted-foreground">{tx.status ?? 'cleared'}</span>
 						</div>
 					</div>
 				{/each}
 			</div>
 		</div>
-		<p class="text-xs text-muted-foreground text-center">Showing {filtered.length} of {transactions.length} transactions</p>
+		<p class="text-[11px] text-muted-foreground text-center">Showing {filtered.length} of {transactions.length} records</p>
 	{/if}
 </div>
 
 <!-- Add Transaction Modal -->
 {#if showAddModal}
-	<!-- svelte-ignore a11y_click_events_have_key_events -->
-	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 	<div
-		class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+		class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60"
 		role="dialog"
 		aria-modal="true"
+		aria-labelledby="add-modal-title"
+		tabindex="-1"
 		onclick={() => (showAddModal = false)}
+		onkeydown={(e) => { if (e.key === 'Escape') showAddModal = false; }}
 	>
+		<!-- Modal Content Box -->
 		<!-- svelte-ignore a11y_click_events_have_key_events -->
 		<!-- svelte-ignore a11y_no_static_element_interactions -->
 		<div
-			class="w-full max-w-lg rounded-3xl bg-card border border-border/80 shadow-2xl p-6 relative overflow-hidden"
+			class="w-full max-w-lg rounded-xl bg-card border border-border/80 shadow-xl p-6 relative overflow-hidden"
 			onclick={(e) => e.stopPropagation()}
 		>
 			<button
 				onclick={() => (showAddModal = false)}
-				class="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors"
+				class="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors p-1 rounded-md hover:bg-secondary"
 				aria-label="Close modal"
 			>
-				<X class="w-5 h-5" />
+				<X class="w-4 h-4" />
 			</button>
 
-			<h3 class="text-xl font-bold mb-4 flex items-center gap-2">
-				<Wallet class="w-5 h-5 text-primary" />
-				Add Transaction
+			<h3 id="add-modal-title" class="text-base font-semibold mb-4 flex items-center gap-2 text-foreground">
+				<Wallet class="w-4.5 h-4.5 text-primary" />
+				Record New Transaction
 			</h3>
 
 			{#if submitError}
-				<div class="mb-4 p-3.5 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-sm flex items-center gap-2">
+				<div class="mb-4 p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-xs flex items-center gap-2">
 					<AlertCircle class="w-4 h-4 shrink-0" />
 					<span>{submitError}</span>
 				</div>
@@ -327,14 +328,18 @@
 			<form onsubmit={handleAddTransaction} class="space-y-4">
 				<!-- Type tabs -->
 				<div>
-					<label class="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Type</label>
-					<div class="flex p-1 rounded-xl bg-secondary/40 border border-border/60">
+					<span id="transaction-type-label" class="block text-xs font-medium text-muted-foreground mb-1.5">Transaction Type</span>
+					<div
+						role="group"
+						aria-labelledby="transaction-type-label"
+						class="flex p-1 rounded-lg bg-secondary/40 border border-border/60"
+					>
 						{#each ['expense', 'income', 'transfer'] as type}
 							<button
 								type="button"
 								onclick={() => (newType = type as any)}
-								class="flex-1 py-2 rounded-lg text-sm font-semibold transition-all capitalize
-									{newType === type ? 'bg-primary text-white shadow-md' : 'text-muted-foreground hover:text-foreground'}"
+								class="flex-1 py-1.5 rounded-md text-xs font-medium transition-colors capitalize
+									{newType === type ? 'bg-primary text-primary-foreground font-semibold shadow-xs' : 'text-muted-foreground hover:text-foreground'}"
 							>
 								{type}
 							</button>
@@ -343,11 +348,11 @@
 				</div>
 
 				<!-- Amount and Merchant -->
-				<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+				<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
 					<div>
-						<label for="amount" class="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Amount ({uiState.currency})</label>
+						<label for="amount" class="block text-xs font-medium text-muted-foreground mb-1">Amount ({uiState.currency})</label>
 						<div class="relative">
-							<span class="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground font-semibold">{uiState.currencySymbol}</span>
+							<span class="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-xs font-mono">{uiState.currencySymbol}</span>
 							<input
 								id="amount"
 								type="number"
@@ -355,79 +360,79 @@
 								required
 								bind:value={newAmount}
 								placeholder="0.00"
-								class="w-full pl-8 pr-4 py-2.5 rounded-xl bg-secondary/20 border border-border/60 text-sm focus:outline-none focus:ring-2 focus:ring-primary/45 focus:border-primary transition-all font-medium"
+								class="w-full pl-7 pr-3 py-2 rounded-lg bg-secondary/30 border border-border/70 text-xs focus:outline-none focus:ring-2 focus:ring-ring font-mono transition-colors"
 							/>
 						</div>
 					</div>
 					<div>
-						<label for="merchant" class="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Merchant / Desc</label>
+						<label for="merchant" class="block text-xs font-medium text-muted-foreground mb-1">Entity / Merchant</label>
 						<input
 							id="merchant"
 							type="text"
 							required
 							bind:value={newMerchant}
-							placeholder="e.g. Amazon, Uber, Salary"
-							class="w-full px-4 py-2.5 rounded-xl bg-secondary/20 border border-border/60 text-sm focus:outline-none focus:ring-2 focus:ring-primary/45 focus:border-primary transition-all"
+							placeholder="e.g. AWS, Payroll, Stripe"
+							class="w-full px-3 py-2 rounded-lg bg-secondary/30 border border-border/70 text-xs focus:outline-none focus:ring-2 focus:ring-ring transition-colors"
 						/>
 					</div>
 				</div>
 
 				<!-- Date and Tags -->
-				<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+				<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
 					<div>
-						<label for="date" class="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Date</label>
+						<label for="date" class="block text-xs font-medium text-muted-foreground mb-1">Posting Date</label>
 						<input
 							id="date"
 							type="date"
 							required
 							bind:value={newDate}
-							class="w-full px-4 py-2.5 rounded-xl bg-secondary/20 border border-border/60 text-sm focus:outline-none focus:ring-2 focus:ring-primary/45 focus:border-primary transition-all"
+							class="w-full px-3 py-2 rounded-lg bg-secondary/30 border border-border/70 text-xs focus:outline-none focus:ring-2 focus:ring-ring transition-colors"
 						/>
 					</div>
 					<div>
-						<label for="tags" class="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Tags (Comma separated)</label>
+						<label for="tags" class="block text-xs font-medium text-muted-foreground mb-1">Tags (Comma-separated)</label>
 						<input
 							id="tags"
 							type="text"
 							bind:value={newTags}
-							placeholder="e.g. food, travel, office"
-							class="w-full px-4 py-2.5 rounded-xl bg-secondary/20 border border-border/60 text-sm focus:outline-none focus:ring-2 focus:ring-primary/45 focus:border-primary transition-all"
+							placeholder="e.g. cloud, software, ops"
+							class="w-full px-3 py-2 rounded-lg bg-secondary/30 border border-border/70 text-xs focus:outline-none focus:ring-2 focus:ring-ring transition-colors"
 						/>
 					</div>
 				</div>
 
-				<!-- Recurring switch -->
+				<!-- Recurring toggle -->
 				<div class="flex items-center justify-between py-2 border-y border-border/40">
 					<div>
-						<p class="text-sm font-semibold">Recurring Transaction</p>
-						<p class="text-xs text-muted-foreground">Repeat this transaction monthly</p>
+						<p class="text-xs font-medium text-foreground">Recurring Entry</p>
+						<p class="text-[11px] text-muted-foreground">Mark as recurring monthly schedule</p>
 					</div>
 					<input
 						type="checkbox"
 						bind:checked={newRecurring}
-						class="w-4 h-4 rounded text-primary focus:ring-primary border-border"
+						class="w-4 h-4 rounded text-primary focus:ring-ring border-border"
 					/>
 				</div>
 
 				<!-- Actions -->
-				<div class="flex gap-3 mt-6">
+				<div class="flex gap-2.5 mt-5">
 					<button
 						type="button"
 						onclick={() => (showAddModal = false)}
-						class="flex-1 py-3 rounded-xl border border-border/60 bg-secondary/40 font-semibold text-sm hover:bg-secondary transition-all"
+						class="flex-1 py-2 rounded-lg border border-border/70 bg-secondary/40 font-medium text-xs hover:bg-secondary transition-colors"
 					>
 						Cancel
 					</button>
 					<button
 						type="submit"
 						disabled={isSubmitting}
-						class="flex-1 py-3 rounded-xl bg-primary text-white font-semibold text-sm hover:bg-primary/90 transition-all shadow-lg shadow-primary/30 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+						class="flex-1 py-2 rounded-lg bg-primary text-primary-foreground font-medium text-xs hover:bg-primary/90 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-xs"
 					>
 						{#if isSubmitting}
-							<Loader2 class="w-4 h-4 animate-spin" />
-							Adding...
+							<Loader2 class="w-3.5 h-3.5 animate-spin" />
+							Recording...
 						{:else}
-							Add Transaction
+							Record Entry
 						{/if}
 					</button>
 				</div>

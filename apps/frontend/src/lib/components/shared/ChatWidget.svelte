@@ -15,7 +15,7 @@
 	let messages = $state<Message[]>([
 		{
 			id: 1,
-			text: "Hi! I'm FinPilot AI. Ask me anything about your finances — spending patterns, budget tips, or transaction summaries.",
+			text: "FinPilot Assistant online. Inquire about ledger transactions, category variances, or cash flow forecasting.",
 			sender: 'ai',
 		},
 	]);
@@ -45,7 +45,7 @@
 				...messages,
 				{
 					id: Date.now() + 1,
-					text: data.reply ?? 'No response received from AI.',
+					text: data.reply ?? 'No response received from AI service.',
 					sender: 'ai',
 				},
 			];
@@ -53,14 +53,14 @@
 			console.error('[ChatWidget] AI request failed:', e.message);
 			const errText =
 				e.message?.includes('Not authorized') || e.message?.includes('jwt')
-					? 'Please log in again to use the AI chat.'
+					? 'Authentication expired. Please sign in again.'
 					: e.message?.includes('quota') || e.message?.includes('429') || e.message?.includes('Too Many')
-					? '⚠️ AI quota exceeded for today. The limit resets daily. Try again tomorrow or check your Google AI Studio plan.'
+					? 'Service rate limit reached for the current period. Please retry shortly.'
 					: e.message?.includes('API key') || e.message?.includes('GEMINI')
-					? '⚠️ AI not configured. Check GEMINI_API_KEY in backend .env'
+					? 'AI service key not configured in backend environment.'
 					: e.message?.includes('Failed to fetch') || e.message?.includes('NetworkError')
-					? '⚠️ Cannot reach the backend. Make sure the server is running on port 5000.'
-					: `⚠️ ${e.message ?? 'Something went wrong. Please try again.'}`;
+					? 'Backend server unreachable at configured port.'
+					: `Service error: ${e.message ?? 'Please try again.'}`;
 
 			messages = [
 				...messages,
@@ -88,42 +88,42 @@
 <button
 	onclick={toggleChat}
 	aria-label="Toggle AI Chat"
-	class="fixed bottom-6 right-6 w-14 h-14 bg-primary text-white rounded-full flex items-center justify-center shadow-xl shadow-primary/40 hover:scale-110 hover:shadow-primary/60 transition-all duration-200 z-50"
+	class="fixed bottom-6 right-6 w-11 h-11 bg-primary text-primary-foreground rounded-lg flex items-center justify-center shadow-md hover:bg-primary/90 transition-colors z-50"
 >
 	{#if uiState.isChatOpen}
-		<X class="w-6 h-6" />
+		<X class="w-5 h-5" />
 	{:else}
-		<MessageSquare class="w-6 h-6" />
+		<MessageSquare class="w-5 h-5" />
 	{/if}
 </button>
 
 <!-- Chat panel -->
 {#if uiState.isChatOpen}
 	<div
-		transition:fly={{ y: 24, duration: 250, opacity: 0 }}
-		class="fixed bottom-24 right-6 w-80 sm:w-[380px] h-[530px] bg-card border border-border/80 rounded-2xl shadow-2xl shadow-black/60 flex flex-col z-50 overflow-hidden backdrop-blur-xl"
+		transition:fly={{ y: 16, duration: 200, opacity: 0 }}
+		class="fixed bottom-20 right-6 w-80 sm:w-[360px] h-[480px] bg-card border border-border/80 rounded-xl shadow-lg flex flex-col z-50 overflow-hidden"
 	>
 		<!-- Header -->
 		<div
-			class="flex items-center justify-between px-4 py-3 border-b border-border/60 bg-secondary/50 backdrop-blur-md"
+			class="flex items-center justify-between px-4 py-3 border-b border-border/60 bg-secondary/40"
 		>
 			<div class="flex items-center gap-2.5">
 				<div
-					class="w-8 h-8 rounded-full bg-primary/20 border border-primary/40 flex items-center justify-center"
+					class="w-7 h-7 rounded-md bg-primary/10 border border-primary/20 flex items-center justify-center"
 				>
 					<Bot class="w-4 h-4 text-primary" />
 				</div>
 				<div>
-					<p class="font-semibold text-sm leading-none">FinPilot AI</p>
-					<div class="flex items-center gap-1 mt-1">
-						<span class="w-1.5 h-1.5 rounded-full bg-emerald animate-pulse block"></span>
-						<span class="text-[11px] text-muted-foreground">Online</span>
+					<p class="font-medium text-xs text-foreground">FinPilot Assistant</p>
+					<div class="flex items-center gap-1.5 mt-0.5">
+						<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 block"></span>
+						<span class="text-[10px] text-muted-foreground">Operational</span>
 					</div>
 				</div>
 			</div>
 			<button
 				onclick={closeChat}
-				class="text-muted-foreground hover:text-foreground transition-colors p-1"
+				class="text-muted-foreground hover:text-foreground transition-colors p-1 rounded hover:bg-secondary"
 				aria-label="Close chat"
 			>
 				<X class="w-4 h-4" />
@@ -133,18 +133,18 @@
 		<!-- Message list -->
 		<div
 			bind:this={messagesEl}
-			class="flex-1 overflow-y-auto p-4 space-y-3 scroll-smooth"
+			class="flex-1 overflow-y-auto p-3.5 space-y-2.5"
 		>
 			{#each messages as msg (msg.id)}
 				<div
 					class="flex {msg.sender === 'user' ? 'justify-end' : 'justify-start'}"
-					in:fade={{ duration: 150 }}
+					in:fade={{ duration: 100 }}
 				>
 					<div
-						class="max-w-[84%] px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed
+						class="max-w-[85%] px-3 py-2 rounded-lg text-xs leading-relaxed
 							{msg.sender === 'user'
-							? 'bg-primary text-white rounded-br-sm'
-							: 'bg-secondary text-foreground rounded-bl-sm border border-border/60'}"
+							? 'bg-primary text-primary-foreground font-medium'
+							: 'bg-secondary/40 text-foreground border border-border/50'}"
 					>
 						{msg.text}
 					</div>
@@ -154,45 +154,35 @@
 			{#if isLoading}
 				<div class="flex justify-start" in:fade={{ duration: 100 }}>
 					<div
-						class="bg-secondary border border-border/60 px-4 py-3 rounded-2xl rounded-bl-sm flex gap-1.5 items-center"
+						class="bg-secondary/40 border border-border/50 px-3 py-2 rounded-lg flex gap-1.5 items-center text-xs text-muted-foreground"
 					>
-						<span
-							class="w-2 h-2 bg-muted-foreground rounded-full animate-bounce"
-							style="animation-delay: 0ms"
-						></span>
-						<span
-							class="w-2 h-2 bg-muted-foreground rounded-full animate-bounce"
-							style="animation-delay: 150ms"
-						></span>
-						<span
-							class="w-2 h-2 bg-muted-foreground rounded-full animate-bounce"
-							style="animation-delay: 300ms"
-						></span>
+						<Loader2 class="w-3.5 h-3.5 animate-spin text-primary" />
+						<span>Thinking…</span>
 					</div>
 				</div>
 			{/if}
 		</div>
 
 		<!-- Input row -->
-		<div class="px-3 py-3 border-t border-border/60 bg-card flex items-center gap-2">
+		<div class="px-3 py-2.5 border-t border-border/60 bg-card flex items-center gap-2">
 			<input
 				type="text"
 				bind:value={input}
 				onkeydown={onKeydown}
-				placeholder="Ask about your finances…"
+				placeholder="Type financial question…"
 				disabled={isLoading}
-				class="flex-1 bg-input border border-border rounded-full px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring transition-all placeholder:text-muted-foreground disabled:opacity-60"
+				class="flex-1 bg-secondary/30 border border-border/70 rounded-lg px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring transition-colors placeholder:text-muted-foreground disabled:opacity-50"
 			/>
 			<button
 				onclick={handleSend}
 				disabled={!input.trim() || isLoading}
-				class="w-9 h-9 bg-primary text-white rounded-full flex items-center justify-center disabled:opacity-40 hover:bg-primary/90 transition-all shrink-0"
+				class="w-7 h-7 bg-primary text-primary-foreground rounded-md flex items-center justify-center disabled:opacity-40 hover:bg-primary/90 transition-colors shrink-0 shadow-xs"
 				aria-label="Send message"
 			>
 				{#if isLoading}
-					<Loader2 class="w-4 h-4 animate-spin" />
+					<Loader2 class="w-3.5 h-3.5 animate-spin" />
 				{:else}
-					<Send class="w-4 h-4" />
+					<Send class="w-3.5 h-3.5" />
 				{/if}
 			</button>
 		</div>

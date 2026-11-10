@@ -13,7 +13,7 @@
 		Plus,
 		RefreshCw,
 		CalendarDays,
-		Coins,
+		Coins
 	} from 'lucide-svelte';
 
 	// ── State ─────────────────────────────────────────────────────────────────
@@ -37,7 +37,6 @@
 		result = null;
 		error = '';
 		txSaved = false;
-		// Only create an object URL preview for images; PDFs get a special viewer
 		preview = URL.createObjectURL(f);
 	}
 
@@ -109,39 +108,39 @@
 
 <svelte:head>
 	<title>Scan Receipt — FinPilot AI</title>
-	<meta name="description" content="Upload a receipt image or PDF and extract structured data instantly using AI-powered OCR." />
+	<meta name="description" content="Upload receipts or invoices for automated OCR extraction and reconciliation." />
 </svelte:head>
 
 <div class="space-y-6 max-w-4xl">
 	<!-- Header -->
-	<header class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+	<header class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-border/60">
 		<div>
-			<h1 class="text-3xl font-bold tracking-tight">Scan Receipt</h1>
-			<p class="text-muted-foreground mt-1 text-sm">
-				Upload a receipt image or PDF and AI will extract merchant, amount and line items automatically.
+			<h1 class="text-2xl font-semibold tracking-tight text-foreground">Receipt Ingestion & OCR</h1>
+			<p class="text-muted-foreground mt-1 text-xs">
+				Extract vendor entity, itemized charges, and tax breakdowns into verified ledger entries.
 			</p>
 		</div>
 		{#if file}
 			<button
 				onclick={clearFile}
-				class="flex items-center gap-2 px-4 py-2 rounded-xl bg-secondary text-sm text-muted-foreground hover:text-foreground transition-all"
+				class="flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-secondary text-xs font-medium text-muted-foreground hover:text-foreground transition-colors border border-border/70"
 			>
-				<RefreshCw class="w-4 h-4" /> Scan Another
+				<RefreshCw class="w-3.5 h-3.5" />
+				Reset File
 			</button>
 		{/if}
 	</header>
 
-	<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-		<!-- ── Left panel: Upload ── -->
+	<div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+		<!-- Left panel: Upload -->
 		<div class="space-y-4">
 			<!-- Drop zone -->
 			{#if !preview}
-				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<div
-					class="relative border-2 border-dashed rounded-2xl p-10 flex flex-col items-center justify-center gap-4 cursor-pointer transition-all duration-200
+					class="relative border border-dashed rounded-xl p-8 flex flex-col items-center justify-center gap-3 cursor-pointer transition-colors
 						{isDragging
-						? 'border-primary bg-primary/8 scale-[1.01]'
-						: 'border-border hover:border-primary/50 hover:bg-primary/3'}"
+						? 'border-primary bg-primary/5'
+						: 'border-border/80 hover:border-border hover:bg-secondary/30'}"
 					ondragover={(e) => { e.preventDefault(); isDragging = true; }}
 					ondragleave={() => (isDragging = false)}
 					ondrop={onDrop}
@@ -150,12 +149,12 @@
 					tabindex="0"
 					onkeydown={(e) => e.key === 'Enter' && document.getElementById('file-input')?.click()}
 				>
-					<div class="w-16 h-16 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center">
-						<Upload class="w-7 h-7 text-primary" />
+					<div class="w-12 h-12 rounded-lg bg-secondary flex items-center justify-center text-primary">
+						<Upload class="w-5 h-5" />
 					</div>
 					<div class="text-center">
-						<p class="font-semibold text-foreground">Drop your receipt here</p>
-						<p class="text-sm text-muted-foreground mt-1">or click to browse — JPEG, PNG, WebP, PDF</p>
+						<p class="font-medium text-xs text-foreground">Drop receipt or invoice document here</p>
+						<p class="text-[11px] text-muted-foreground mt-0.5">JPEG, PNG, WebP, or PDF format</p>
 					</div>
 					<input
 						id="file-input"
@@ -167,229 +166,188 @@
 				</div>
 			{:else}
 				<!-- File preview -->
-				<div class="relative rounded-2xl overflow-hidden border border-border/60 bg-card shadow-xl">
+				<div class="relative rounded-xl overflow-hidden border border-border/70 bg-card shadow-xs">
 					{#if file?.type === 'application/pdf'}
-						<!-- PDF viewer -->
 						<iframe
 							src="{preview}#toolbar=0"
-							class="w-full h-80 border-0"
-							title="PDF Preview"
+							class="w-full h-72 border-0"
+							title="PDF Document Preview"
 						></iframe>
 					{:else}
-						<!-- Image preview -->
-						<img src={preview} alt="Receipt preview" class="w-full object-contain max-h-80" />
+						<img src={preview} alt="Receipt Preview" class="w-full object-contain max-h-72 bg-secondary/10" />
 					{/if}
 					<button
 						onclick={clearFile}
-						class="absolute top-3 right-3 w-8 h-8 rounded-full bg-background/80 backdrop-blur-sm border border-border flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
-						aria-label="Remove file"
+						class="absolute top-3 right-3 w-7 h-7 rounded-md bg-card/90 border border-border flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+						aria-label="Remove document"
 					>
-						<X class="w-4 h-4" />
+						<X class="w-3.5 h-3.5" />
 					</button>
-					<div class="absolute bottom-3 left-3 px-3 py-1.5 rounded-lg bg-background/80 backdrop-blur-sm border border-border/60 text-xs text-muted-foreground flex items-center gap-1.5">
+					<div class="absolute bottom-3 left-3 px-2.5 py-1 rounded bg-card/90 border border-border/70 text-[11px] text-muted-foreground flex items-center gap-1.5">
 						{#if file?.type === 'application/pdf'}
-							<FileText class="w-3.5 h-3.5 text-red-400" />
+							<FileText class="w-3 h-3 text-destructive" />
 						{:else}
-							<FileImage class="w-3.5 h-3.5" />
+							<FileImage class="w-3 h-3 text-primary" />
 						{/if}
-						{file?.name}
+						<span class="truncate max-w-[200px]">{file?.name}</span>
 					</div>
 				</div>
 			{/if}
 
-			<!-- Upload button -->
+			<!-- Upload action button -->
 			{#if file && !result}
 				<button
 					onclick={handleUpload}
 					disabled={isUploading}
-					class="w-full py-3 rounded-xl bg-primary text-white font-semibold flex items-center justify-center gap-2 hover:bg-primary/90 transition-all shadow-lg shadow-primary/30 disabled:opacity-60 disabled:cursor-not-allowed"
+					class="w-full py-2.5 rounded-lg bg-primary text-primary-foreground font-medium text-xs flex items-center justify-center gap-2 hover:bg-primary/90 transition-colors shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
 				>
 					{#if isUploading}
-						<Loader2 class="w-5 h-5 animate-spin" />
-						Extracting text…
+						<Loader2 class="w-4 h-4 animate-spin" />
+						Processing Optical Character Recognition…
 					{:else}
-						<ReceiptText class="w-5 h-5" />
-						Extract Data from Receipt
+						<ReceiptText class="w-4 h-4" />
+						Extract Document Data
 					{/if}
 				</button>
 			{/if}
 
-			<!-- Error -->
+			<!-- Error message -->
 			{#if error}
-				<div class="p-4 rounded-xl bg-destructive/10 border border-destructive/30 flex items-start gap-3">
-					<AlertCircle class="w-5 h-5 text-destructive shrink-0 mt-0.5" />
-					<p class="text-sm text-destructive">{error}</p>
+				<div class="p-3.5 rounded-lg bg-destructive/10 border border-destructive/25 flex items-start gap-2.5 text-xs text-destructive">
+					<AlertCircle class="w-4 h-4 shrink-0 mt-0.5" />
+					<p>{error}</p>
 				</div>
 			{/if}
 
-			<!-- Info cards -->
+			<!-- Info specifications -->
 			{#if !file}
-				<div class="grid grid-cols-3 gap-3 mt-2">
+				<div class="grid grid-cols-3 gap-2.5 mt-2 text-xs">
 					{#each [
-						{ label: 'AI-Powered', desc: 'Groq + OCR.space' },
-						{ label: 'Instant', desc: 'Results in seconds' },
-						{ label: 'PDF + Images', desc: 'JPEG, PNG, WebP, PDF' }
+						{ label: 'Vision OCR', desc: 'Automated entity & tax extraction' },
+						{ label: 'Multi-Format', desc: 'PDF invoices & camera receipts' },
+						{ label: '3-Way Match', desc: 'Pushed directly to audit pipeline' }
 					] as card}
-						<div class="p-3 rounded-xl bg-card border border-border/60 text-center">
-							<p class="text-xs font-semibold text-foreground">{card.label}</p>
-							<p class="text-[11px] text-muted-foreground mt-0.5">{card.desc}</p>
+						<div class="p-3 rounded-lg bg-card border border-border/70">
+							<p class="font-medium text-foreground">{card.label}</p>
+							<p class="text-[11px] text-muted-foreground mt-0.5 leading-tight">{card.desc}</p>
 						</div>
 					{/each}
 				</div>
 			{/if}
 		</div>
 
-		<!-- ── Right panel: Results ── -->
+		<!-- Right panel: Results -->
 		<div class="space-y-4">
 			{#if !result && !isUploading}
-				<!-- Empty state -->
-				<div class="h-full min-h-[300px] rounded-2xl bg-card border border-border/60 border-dashed flex flex-col items-center justify-center gap-3 text-center p-8">
-					<ReceiptText class="w-12 h-12 text-muted-foreground opacity-30" />
-					<p class="font-medium text-muted-foreground">Extracted data will appear here</p>
-					<p class="text-sm text-muted-foreground/60">Upload a receipt image and click Extract</p>
+				<div class="h-full min-h-[280px] rounded-xl bg-card border border-border/70 border-dashed flex flex-col items-center justify-center gap-2 text-center p-6">
+					<ReceiptText class="w-8 h-8 text-muted-foreground/40" />
+					<p class="font-medium text-xs text-foreground">Extracted data will be structured here</p>
+					<p class="text-[11px] text-muted-foreground">Select an invoice or receipt to begin processing</p>
 				</div>
 			{:else if isUploading}
-				<div class="h-full min-h-[300px] rounded-2xl bg-card border border-border/60 flex flex-col items-center justify-center gap-4">
-					<div class="relative">
-						<div class="w-16 h-16 rounded-full border-2 border-primary/20 flex items-center justify-center">
-							<Loader2 class="w-8 h-8 text-primary animate-spin" />
-						</div>
-						<div class="absolute inset-0 rounded-full border-2 border-primary/10 animate-ping"></div>
-					</div>
+				<div class="h-full min-h-[280px] rounded-xl bg-card border border-border/70 flex flex-col items-center justify-center gap-3">
+					<Loader2 class="w-6 h-6 text-primary animate-spin" />
 					<div class="text-center">
-						<p class="font-semibold">Analyzing receipt…</p>
-						<p class="text-sm text-muted-foreground mt-1">Gemini Vision is reading your receipt</p>
+						<p class="font-medium text-xs text-foreground">Extracting document metadata…</p>
+						<p class="text-[11px] text-muted-foreground mt-0.5">Parsing tax rates, totals, and line items</p>
 					</div>
 				</div>
 			{:else if result}
 				<!-- Result card -->
-				<div class="rounded-2xl bg-card border border-border/60 overflow-hidden shadow-xl">
-					<!-- Header -->
-					<div class="px-5 py-4 bg-emerald-500/5 border-b border-border/60 flex items-center gap-3">
-						<div class="w-9 h-9 rounded-xl bg-emerald-500/15 flex items-center justify-center">
-							<CheckCircle2 class="w-5 h-5 text-emerald-400" />
-						</div>
+				<div class="rounded-xl bg-card border border-border/70 overflow-hidden shadow-xs">
+					<div class="px-4 py-3 bg-secondary/30 border-b border-border/60 flex items-center gap-2.5">
+						<CheckCircle2 class="w-4 h-4 text-emerald-400" />
 						<div>
-							<p class="font-semibold text-sm">Extraction Complete</p>
-							<p class="text-xs text-muted-foreground">Review and save the data below</p>
+							<p class="font-medium text-xs text-foreground">Extraction Complete</p>
+							<p class="text-[11px] text-muted-foreground">Review parsed fields before committing to ledger</p>
 						</div>
 					</div>
 
-					<!-- Summary fields -->
-					<div class="p-5 space-y-4">
-						<!-- Row 1: Merchant + Invoice Number -->
-						<div class="p-3 rounded-xl bg-secondary/40 border border-border/40">
-							<p class="text-[11px] text-muted-foreground uppercase font-semibold tracking-wider mb-1">Merchant</p>
-							<p class="font-semibold text-sm">{result.merchant ?? '—'}</p>
+					<!-- Fields -->
+					<div class="p-4 space-y-3 text-xs">
+						<div class="p-2.5 rounded-lg bg-secondary/30 border border-border/50">
+							<p class="text-[11px] text-muted-foreground mb-0.5">Vendor / Entity</p>
+							<p class="font-medium text-foreground">{result.merchant ?? '—'}</p>
 						</div>
 
-						<div class="grid grid-cols-2 gap-3">
-							<!-- Date -->
-							<div class="p-3 rounded-xl bg-secondary/40 border border-border/40">
-								<p class="text-[11px] text-muted-foreground uppercase font-semibold tracking-wider mb-1 flex items-center gap-1">
-									<CalendarDays class="w-3 h-3" /> Invoice Date
-								</p>
-								<p class="font-semibold text-sm">{result.date ?? '—'}</p>
+						<div class="grid grid-cols-2 gap-2.5">
+							<div class="p-2.5 rounded-lg bg-secondary/30 border border-border/50">
+								<p class="text-[11px] text-muted-foreground mb-0.5">Posting Date</p>
+								<p class="font-medium text-foreground">{result.date ?? '—'}</p>
 							</div>
 
-							<!-- Invoice number -->
-							<div class="p-3 rounded-xl bg-secondary/40 border border-border/40">
-								<p class="text-[11px] text-muted-foreground uppercase font-semibold tracking-wider mb-1">Invoice No.</p>
-								<p class="font-semibold text-sm truncate">{result.invoice_number ?? '—'}</p>
+							<div class="p-2.5 rounded-lg bg-secondary/30 border border-border/50">
+								<p class="text-[11px] text-muted-foreground mb-0.5">Invoice Reference</p>
+								<p class="font-medium text-foreground truncate">{result.invoice_number ?? '—'}</p>
 							</div>
 
-							<!-- Currency -->
-							<div class="p-3 rounded-xl bg-secondary/40 border border-border/40">
-								<p class="text-[11px] text-muted-foreground uppercase font-semibold tracking-wider mb-1">Currency</p>
-								<p class="font-semibold text-sm">{result.currency ?? 'INR'}</p>
+							<div class="p-2.5 rounded-lg bg-secondary/30 border border-border/50">
+								<p class="text-[11px] text-muted-foreground mb-0.5">Currency</p>
+								<p class="font-medium text-foreground">{result.currency ?? 'INR'}</p>
 							</div>
 
-							<!-- Base amount -->
-							<div class="p-3 rounded-xl bg-secondary/40 border border-border/40">
-								<p class="text-[11px] text-muted-foreground uppercase font-semibold tracking-wider mb-1">Base Amount</p>
-								<p class="font-semibold text-sm">{fmt(result.base_amount ?? 0, result.currency)}</p>
+							<div class="p-2.5 rounded-lg bg-secondary/30 border border-border/50">
+								<p class="text-[11px] text-muted-foreground mb-0.5">Base Taxable</p>
+								<p class="font-mono font-medium text-foreground">{fmt(result.base_amount ?? 0, result.currency)}</p>
 							</div>
 
-							<!-- Tax — always shown, even when 0 -->
-							<div class="p-3 rounded-xl bg-secondary/40 border border-border/40">
-								<p class="text-[11px] text-muted-foreground uppercase font-semibold tracking-wider mb-1">Tax</p>
-								<p class="font-semibold text-sm {(result.tax_amount ?? 0) > 0 ? 'text-amber-400' : ''}">
+							<div class="p-2.5 rounded-lg bg-secondary/30 border border-border/50">
+								<p class="text-[11px] text-muted-foreground mb-0.5">Tax Assessed</p>
+								<p class="font-mono font-medium {(result.tax_amount ?? 0) > 0 ? 'text-amber-400' : 'text-foreground'}">
 									{fmt(result.tax_amount ?? 0, result.currency)}
 								</p>
 							</div>
 
-							<!-- Additional Charges — always shown -->
-							<div class="p-3 rounded-xl bg-secondary/40 border border-border/40">
-								<p class="text-[11px] text-muted-foreground uppercase font-semibold tracking-wider mb-1">Additional Charges</p>
-								<p class="font-semibold text-sm">
+							<div class="p-2.5 rounded-lg bg-secondary/30 border border-border/50">
+								<p class="text-[11px] text-muted-foreground mb-0.5">Ancillary Fees</p>
+								<p class="font-mono font-medium text-foreground">
 									{fmt(result.additional_charges?.reduce((s, c) => s + (c.amount || 0), 0) ?? 0, result.currency)}
 								</p>
 							</div>
 
-							<!-- Discount (only show if > 0) -->
-							{#if (result.discount ?? 0) > 0}
-								<div class="p-3 rounded-xl bg-secondary/40 border border-emerald-500/30">
-									<p class="text-[11px] text-emerald-400 uppercase font-semibold tracking-wider mb-1">Discount</p>
-									<p class="font-semibold text-sm text-emerald-400">- {fmt(result.discount ?? 0, result.currency)}</p>
-								</div>
-							{/if}
-
-							<!-- Grand Total -->
-							<div class="p-3 rounded-xl bg-secondary/40 border border-border/40 {(result.discount ?? 0) > 0 ? '' : 'col-span-2'}">
-								<p class="text-[11px] text-muted-foreground uppercase font-semibold tracking-wider mb-1 flex items-center gap-1">
-									<Coins class="w-3 h-3" /> Grand Total
-								</p>
-								<p class="font-bold text-lg text-emerald-400">{fmt(result.total_amount, result.currency)}</p>
+							<!-- Total Amount -->
+							<div class="p-2.5 rounded-lg bg-secondary/50 border border-border/70 col-span-2">
+								<p class="text-[11px] text-muted-foreground mb-0.5">Total Payable</p>
+								<p class="font-mono font-semibold text-base text-emerald-400">{fmt(result.total_amount, result.currency)}</p>
 							</div>
 						</div>
 
 						<!-- Line items -->
 						{#if result.line_items?.length > 0}
 							<div>
-								<p class="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1.5">
-									<ShoppingCart class="w-3.5 h-3.5" /> Line Items
+								<p class="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1.5">
+									<ShoppingCart class="w-3.5 h-3.5" />
+									Itemized Charges
 								</p>
-								<div class="space-y-1.5 max-h-36 overflow-y-auto">
+								<div class="space-y-1 max-h-32 overflow-y-auto">
 									{#each result.line_items as item}
-										<div class="flex items-center justify-between px-3 py-2 rounded-lg bg-secondary/30 text-sm">
-											<span class="text-muted-foreground truncate mr-3">{item.description}</span>
-											<span class="font-medium shrink-0">{fmt(item.amount, result.currency)}</span>
+										<div class="flex items-center justify-between px-2.5 py-1.5 rounded bg-secondary/20 text-xs">
+											<span class="text-muted-foreground truncate mr-2">{item.description}</span>
+											<span class="font-mono font-medium text-foreground shrink-0">{fmt(item.amount, result.currency)}</span>
 										</div>
 									{/each}
 								</div>
 							</div>
 						{/if}
 
-						<!-- Raw text collapsible -->
-						{#if result.raw_text}
-							<details class="group">
-								<summary class="text-xs text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors">
-									Show raw extracted text
-								</summary>
-								<div class="mt-2 p-3 rounded-lg bg-secondary/30 text-xs text-muted-foreground font-mono leading-relaxed max-h-28 overflow-y-auto">
-									{result.raw_text}
-								</div>
-							</details>
-						{/if}
-
-						<!-- Save button -->
+						<!-- Save action -->
 						{#if txSaved}
-							<div class="flex items-center gap-2 px-4 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm font-medium">
-								<CheckCircle2 class="w-4 h-4" />
-								Transaction saved successfully!
+							<div class="flex items-center gap-2 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 text-xs font-medium">
+								<CheckCircle2 class="w-4 h-4 shrink-0" />
+								<span>Transaction committed to general ledger.</span>
 							</div>
 						{:else}
 							<button
 								onclick={saveAsTransaction}
 								disabled={savingTx}
-								class="w-full py-2.5 rounded-xl bg-primary text-white font-semibold text-sm flex items-center justify-center gap-2 hover:bg-primary/90 transition-all shadow-lg shadow-primary/20 disabled:opacity-60"
+								class="w-full py-2 rounded-lg bg-primary text-primary-foreground font-medium text-xs flex items-center justify-center gap-2 hover:bg-primary/90 transition-colors shadow-xs disabled:opacity-50"
 							>
 								{#if savingTx}
-									<Loader2 class="w-4 h-4 animate-spin" />
-									Saving…
+									<Loader2 class="w-3.5 h-3.5 animate-spin" />
+									Recording Entry…
 								{:else}
-									<Plus class="w-4 h-4" />
-									Save as Transaction
+									<Plus class="w-3.5 h-3.5" />
+									Post to General Ledger
 								{/if}
 							</button>
 						{/if}
