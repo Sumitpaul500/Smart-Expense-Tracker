@@ -348,7 +348,9 @@ def deterministic_receipt_parser(raw_text: str) -> dict:
     # 1. Merchant extraction from header
     ignore_words = {"bill of supply", "tax invoice", "invoice", "receipt", "original for recipient", "duplicate", "cash memo"}
     for line in lines[:10]:
-        clean = re.sub(r'[^a-zA-Z0-9\s&.-]', '', line).strip()
+        # Strip common document receipt labels like (Original For Recipient)
+        cleaned_line = re.sub(r'(?i)^\s*\(?(?:original\s+for\s+recipient|duplicate|triplicate|bill\s+of\s+supply)\)?\s*', '', line).strip()
+        clean = re.sub(r'[^a-zA-Z0-9\s&.-]', '', cleaned_line).strip()
         if len(clean) >= 3 and clean.lower() not in ignore_words and not clean.lower().startswith("address"):
             res["merchant"] = sanitize_merchant(clean)
             break
@@ -387,21 +389,30 @@ def deterministic_receipt_parser(raw_text: str) -> dict:
             pass
 
     if amounts:
-        tot_m = re.search(r'(?i)(?:grand\s+total|total\s+amount|net\s+payable|total\s+invoice\s+value|total)\s*[:.-]?\s*(?:inr|rs\.?|₹)?\s*([0-9,]+\.\d{2})', raw_text)
+        tot_m = re.search(r'(?i)(?:grand\s+total|total\s+invoice\s+value|net\s+payable|total\s+amount)\s*[:.-]?\s*(?:inr|rs\.?|₹)?\s*([0-9,]+\.\d{2})', raw_text)
         if tot_m:
             try:
-                res["total_amount"] = float(tot_m.group(1).replace(',', ''))
+                matched_val = float(tot_m.group(1).replace(',', ''))
+                # If Grand Total line has multiple numbers (e.g. Base, Tax, Total), prefer the true grand total max
+                res["total_amount"] = max(amounts) if max(amounts) > matched_val else matched_val
             except ValueError:
                 res["total_amount"] = max(amounts)
         else:
             res["total_amount"] = max(amounts)
 
-    tax_m = re.search(r'(?i)(?:total\s+tax|gst|igst|cgst|sgst|tax\s+amount|taxes|airport\s+taxes)\s*[:.-]?\s*(?:inr|rs\.?|₹)?\s*([0-9,]+\.\d{2})', raw_text)
+    tax_m = re.search(r'(?i)(?:total\s+tax|gst|igst|cgst|sgst|tax\s+amount|taxes|airport\s+taxes(?:\s*[\/\-]\s*pass\s+through)?)\s*[:.-]?\s*(?:inr|rs\.?|₹)?\s*([0-9,]+\.\d{2})', raw_text)
+    if not tax_m:
+        tax_m = re.search(r'(?i)airport\s+taxes[^\n\r\d]*?([0-9,]+\.\d{2})', raw_text)
     if tax_m:
         try:
             res["tax_amount"] = float(tax_m.group(1).replace(',', ''))
+            if "airport" in tax_m.group(0).lower():
+                res["tax_breakdown"]["airport_tax"] = res["tax_amount"]
         except ValueError:
             pass
+
+    if res.get("total_amount", 0.0) > 0 and res.get("base_amount", 0.0) == 0.0:
+        res["base_amount"] = round(res["total_amount"] - res.get("tax_amount", 0.0), 2)
 
     res = enforce_tax(res, raw_text)
     res = validate_amounts(res)
@@ -588,7 +599,7 @@ Return ONLY this JSON (no extra text):
         from groq import Groq  # pyrefly: ignore [missing-import]
 
         client  = Groq(api_key=groq_key)
-        models  = ["groq/compound-mini", "qwen/qwen3.6-27b", "groq/compound"]
+        models  = ["qwen/qwen3.8-27b", "openai/gpt-oss-120b", "openai/gpt-oss-20b"]
         last_err = None
 
         for model_name in models:

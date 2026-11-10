@@ -53,9 +53,9 @@ INSTRUCTIONS FOR ULTRA-CLEAN & EASY RESPONSES:
                 const groq = new Groq({ apiKey: GROQ_KEY });
                 // These are confirmed available models as of mid-2025
                 const models = [
-                    'groq/compound-mini',
-                    'qwen/qwen3.6-27b',
-                    'groq/compound',
+                    'qwen/qwen3.8-27b',
+                    'openai/gpt-oss-120b',
+                    'openai/gpt-oss-20b',
                 ];
 
                 for (const model of models) {
