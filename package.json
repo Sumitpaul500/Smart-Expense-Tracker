@@ -8,6 +8,10 @@
   ],
   "scripts": {
     "dev": "npm run dev --workspaces --if-present",
+    "dev:frontend": "npm run dev --workspace=frontend",
+    "dev:backend": "npm run dev --workspace=backend",
+    "dev:ml": "cd apps/ml-service && .\\venv\\Scripts\\python main.py",
+    "start:all": "powershell -ExecutionPolicy Bypass -File .\\start-all.ps1",
     "build": "npm run build --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present"
   },
