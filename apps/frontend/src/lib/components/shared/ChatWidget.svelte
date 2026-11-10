@@ -3,6 +3,7 @@
 	import { uiState, toggleChat, closeChat } from '$lib/stores/ui.svelte';
 	import { authState } from '$lib/stores/auth.svelte';
 	import { aiApi } from '$lib/api';
+	import { formatAiMessage } from '$lib/utils/markdown';
 	import { MessageSquare, X, Send, Bot, Loader2 } from 'lucide-svelte';
 	import { tick } from 'svelte';
 
@@ -143,10 +144,14 @@
 					<div
 						class="max-w-[85%] px-3 py-2 rounded-lg text-xs leading-relaxed
 							{msg.sender === 'user'
-							? 'bg-primary text-primary-foreground font-medium'
+							? 'bg-primary text-primary-foreground font-medium whitespace-pre-wrap'
 							: 'bg-secondary/40 text-foreground border border-border/50'}"
 					>
-						{msg.text}
+						{#if msg.sender === 'ai'}
+							{@html formatAiMessage(msg.text)}
+						{:else}
+							{msg.text}
+						{/if}
 					</div>
 				</div>
 			{/each}

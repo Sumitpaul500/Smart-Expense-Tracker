@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { aiApi } from '$lib/api';
 	import { uiState } from '$lib/stores/ui.svelte';
+	import { formatAiMessage } from '$lib/utils/markdown';
 	import {
 		Bot,
 		Send,
@@ -104,10 +105,14 @@
 				<div
 					class="max-w-[85%] p-3 rounded-lg text-xs leading-relaxed
 					{msg.role === 'user'
-						? 'bg-primary text-primary-foreground font-medium'
+						? 'bg-primary text-primary-foreground font-medium whitespace-pre-wrap'
 						: 'bg-secondary/40 border border-border/50 text-foreground'}"
 				>
-					{@html msg.text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br/>')}
+					{#if msg.role === 'assistant'}
+						{@html formatAiMessage(msg.text)}
+					{:else}
+						{msg.text}
+					{/if}
 				</div>
 
 				{#if msg.role === 'user'}
